@@ -10,11 +10,6 @@ export interface AuditEntry {
   newState: unknown;
 }
 
-/**
- * Writes an audit log entry. auditLogs is Function-only in the security
- * rules (no client read/write path exists at all), so this is the sole
- * path by which entries are ever created.
- */
 export async function logAudit(db: Firestore, entry: AuditEntry): Promise<void> {
   await db.collection("auditLogs").add({
     ...entry,

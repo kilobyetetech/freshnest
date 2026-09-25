@@ -1,15 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { httpsCallable } from "firebase/functions";
-import { functions } from "@/lib/firebase/client";
+import { auth } from "@/lib/firebase/client";
 
 type StaffRole = "admin" | "finance" | "staff" | "rider";
-
-const provisionStaffUserFn = httpsCallable<
-  { email: string; phone?: string; displayName: string; role: StaffRole },
-  { uid: string; role: StaffRole }
->(functions, "provisionStaffUser");
 
 export default function ProvisionStaffPage() {
   const [email, setEmail] = useState("");
@@ -26,21 +20,29 @@ export default function ProvisionStaffPage() {
     setError(null);
     setResult(null);
     try {
-      const res = await provisionStaffUserFn({
-        email,
-        phone: phone || undefined,
-        displayName,
-        role,
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch("/api/provision-staff-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          email,
+          phone: phone || undefined,
+          displayName,
+          role,
+        }),
       });
-      setResult(res.data);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Provisioning failed.");
+      }
+      setResult(data);
       setEmail("");
       setPhone("");
       setDisplayName("");
     } catch (err) {
-      // Callable errors from HttpsError arrive with a `.message` that
-      // already reflects the specific failure (permission-denied,
-      // already-exists, or the rollback-outcome messages from the
-      // Function) — surfaced directly rather than a generic message.
       setError(err instanceof Error ? err.message : "Provisioning failed.");
     } finally {
       setBusy(false);

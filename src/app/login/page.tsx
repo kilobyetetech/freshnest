@@ -18,11 +18,21 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Idempotent -- if this account already has a role, the API route is
+  // a no-op. Calling it on every login (not just registration) covers
+  // the Google Sign-In case, where "sign up" and "log in" are the same
+  // button press for a brand-new account.
+  async function completeSignup() {
+    const idToken = await auth.currentUser?.getIdToken();
+    if (!idToken) return;
+    await fetch("/api/complete-signup", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
+  }
+
   async function afterSignIn() {
-    // A fresh sign-in produces a token containing current claims, but we
-    // still force a refresh as defense-in-depth. For a brand-new Google
-    // account, the onCustomerSignUp trigger runs asynchronously after
-    // this resolves -- poll briefly rather than assuming it's instant.
+    await completeSignup();
     for (let i = 0; i < 8; i++) {
       await refreshClaims();
       const token = await auth.currentUser?.getIdTokenResult();

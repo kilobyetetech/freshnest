@@ -20,6 +20,19 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Calls our Vercel API route (Admin SDK, server-side) to set the
+  // "customer" role claim and create the profile docs -- the temporary
+  // stand-in for the onCustomerSignUp Cloud Function trigger, since
+  // Cloud Functions need Blaze billing, which isn't set up yet.
+  async function completeSignup() {
+    const idToken = await auth.currentUser?.getIdToken();
+    if (!idToken) return;
+    await fetch("/api/complete-signup", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
+  }
+
   async function waitForRoleClaim(maxAttempts = 8, delayMs = 500) {
     for (let i = 0; i < maxAttempts; i++) {
       await refreshClaims();
@@ -27,9 +40,6 @@ export default function RegisterPage() {
       if (token?.claims.role) return;
       await new Promise((res) => setTimeout(res, delayMs));
     }
-    // If the claim still hasn't appeared, we proceed anyway -- the
-    // customer portal's RoleGuard will correctly redirect if the role is
-    // still missing, rather than the app silently pretending it worked.
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -39,6 +49,7 @@ export default function RegisterPage() {
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: name });
+      await completeSignup();
       await waitForRoleClaim();
       router.push("/customer");
     } catch (err) {
@@ -54,6 +65,7 @@ export default function RegisterPage() {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
+      await completeSignup();
       await waitForRoleClaim();
       router.push("/customer");
     } catch (err) {
