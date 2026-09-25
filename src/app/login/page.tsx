@@ -9,6 +9,8 @@ import {
 } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { portalPathForRole } from "@/lib/auth/portalPathForRole";
+import type { Role } from "@/types/models";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,13 +35,21 @@ export default function LoginPage() {
 
   async function afterSignIn() {
     await completeSignup();
+    let role: Role | null = null;
     for (let i = 0; i < 8; i++) {
       await refreshClaims();
       const token = await auth.currentUser?.getIdTokenResult();
-      if (token?.claims.role) break;
+      const claimRole = token?.claims.role as Role | undefined;
+      if (claimRole) {
+        role = claimRole;
+        break;
+      }
       await new Promise((res) => setTimeout(res, 400));
     }
-    router.push("/");
+    // Route straight to the correct portal for this account's role,
+    // rather than always landing on the public home page and expecting
+    // the person to know or type the right URL themselves.
+    router.push(portalPathForRole(role));
   }
 
   async function handleEmailLogin(e: React.FormEvent) {

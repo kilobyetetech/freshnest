@@ -1,6 +1,29 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { portalPathForRole } from "@/lib/auth/portalPathForRole";
 
 export default function HomePage() {
+  const { user, role, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    // Safety net: if someone lands on the public home page while
+    // already signed in (e.g. an old bookmark, or navigating back),
+    // send them straight to their portal instead of showing them the
+    // logged-out login/register buttons.
+    if (!loading && user && role) {
+      router.replace(portalPathForRole(role));
+    }
+  }, [loading, user, role, router]);
+
+  if (loading || (user && role)) {
+    return <main className="page">Loading…</main>;
+  }
+
   return (
     <main className="page">
       <h1>FreshNest Laundry</h1>
