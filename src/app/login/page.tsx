@@ -25,21 +25,38 @@ export default function LoginPage() {
   async function completeSignup() {
     const idToken = await auth.currentUser?.getIdToken();
     if (!idToken) return;
-    await fetch("/api/complete-signup", {
+    const response = await fetch("/api/complete-signup", {
       method: "POST",
       headers: { Authorization: `Bearer ${idToken}` },
     });
+    if (!response.ok) {
+      throw new Error("We could not finish setting up your account. Please try again.");
+    }
   }
 
   async function afterSignIn() {
     await completeSignup();
+
+    let role: string | undefined;
     for (let i = 0; i < 8; i++) {
       await refreshClaims();
       const token = await auth.currentUser?.getIdTokenResult();
-      if (token?.claims.role) break;
+      role = token?.claims.role as string | undefined;
+      if (role) break;
       await new Promise((res) => setTimeout(res, 400));
     }
-    router.push("/");
+
+    const destination =
+      role === "admin"
+        ? "/admin"
+        : role === "finance"
+          ? "/finance"
+          : role === "staff"
+            ? "/staff"
+            : role === "rider"
+              ? "/rider"
+              : "/";
+    router.replace(destination);
   }
 
   async function handleEmailLogin(e: React.FormEvent) {
