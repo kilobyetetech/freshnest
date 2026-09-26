@@ -10,6 +10,7 @@ import {
 } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { portalPathForRole } from "@/lib/auth/portalPathForRole";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -50,8 +51,8 @@ export default function RegisterPage() {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: name });
       await completeSignup();
-      await waitForRoleClaim();
-      router.push("/customer");
+      const role = await waitForRoleClaim();
+      router.push(portalPathForRole(role));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed.");
     } finally {
@@ -66,8 +67,8 @@ export default function RegisterPage() {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       await completeSignup();
-      await waitForRoleClaim();
-      router.push("/customer");
+      const role = await waitForRoleClaim();
+      router.push(portalPathForRole(role));
     } catch (err) {
       setError(
         err instanceof Error
