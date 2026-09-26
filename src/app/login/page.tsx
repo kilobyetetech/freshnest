@@ -27,10 +27,13 @@ export default function LoginPage() {
   async function completeSignup() {
     const idToken = await auth.currentUser?.getIdToken();
     if (!idToken) return;
-    await fetch("/api/complete-signup", {
+    const response = await fetch("/api/complete-signup", {
       method: "POST",
       headers: { Authorization: `Bearer ${idToken}` },
     });
+    if (!response.ok) {
+      throw new Error("We could not finish setting up your account. Please try again.");
+    }
   }
 
   async function afterSignIn() {
@@ -46,10 +49,7 @@ export default function LoginPage() {
       }
       await new Promise((res) => setTimeout(res, 400));
     }
-    // Route straight to the correct portal for this account's role,
-    // rather than always landing on the public home page and expecting
-    // the person to know or type the right URL themselves.
-    router.push(portalPathForRole(role));
+    router.replace(portalPathForRole(role));
   }
 
   async function handleEmailLogin(e: React.FormEvent) {
