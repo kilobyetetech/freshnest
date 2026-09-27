@@ -1,0 +1,133 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
+} from "firebase/auth";
+import { auth } from "@/lib/firebase/client";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { portalPathForRole } from "@/lib/auth/portalPathForRole";
+import type { Role } from "@/types/models";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const { refreshClaims } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Idempotent -- if this account already has a role, the API route is
+  // a no-op. Calling it on every login (not just registration) covers
+  // the Google Sign-In case, where "sign up" and "log in" are the same
+  // button press for a brand-new account.
+  async function completeSignup() {
+    const idToken = await auth.currentUser?.getIdToken();
+    if (!idToken) return;
+    await fetch("/api/complete-signup", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
+  }
+
+  async function afterSignIn() {
+    await completeSignup();
+    let role: Role | null = null;
+    for (let i = 0; i < 8; i++) {
+      await refreshClaims();
+      const token = await auth.currentUser?.getIdTokenResult();
+      const claimRole = token?.claims.role as Role | undefined;
+      if (claimRole) {
+        role = claimRole;
+        break;
+      }
+      await new Promise((res) => setTimeout(res, 400));
+    }
+    // Route straight to the correct portal for this account's role,
+    // rather than always landing on the public home page and expecting
+    // the person to know or type the right URL themselves.
+    router.push(portalPathForRole(role));
+  }
+
+  async function handleEmailLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      await afterSignIn();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setError(null);
+    setBusy(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      await afterSignIn();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Google sign-in failed. If you're inside an in-app browser (e.g. from Snapchat/TikTok/Telegram), open this page in Chrome instead -- Google blocks sign-in inside most embedded browsers."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="page">
+      <h1>Log in</h1>
+      {error && <p className="error">{error}</p>}
+
+      <button
+        type="button"
+        className="button"
+        style={{ background: "#fff", color: "#1a1a1a", border: "1px solid #ccc", marginBottom: 16 }}
+        onClick={handleGoogleSignIn}
+        disabled={busy}
+      >
+        Continue with Google
+      </button>
+
+      <div style={{ textAlign: "center", color: "#999", fontSize: 13, marginBottom: 16 }}>
+        or use email
+      </div>
+
+      <form onSubmit={handleEmailLogin}>
+        <input
+          className="field"
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+        <input
+          className="field"
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+        <button className="button" type="submit" disabled={busy}>
+          {busy ? "Signing in..." : "Log in"}
+        </button>
+      </form>
+
+      <p style={{ fontSize: 14, marginTop: 16 }}>
+        New here? <a href="/register">Create an account</a>
+      </p>
+    </main>
+  );
+}
