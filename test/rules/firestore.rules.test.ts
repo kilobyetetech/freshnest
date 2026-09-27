@@ -35,10 +35,9 @@ afterEach(async () => {
 // Seed helper: writes directly with admin privileges, bypassing rules,
 // to set up preconditions for a test.
 async function seed(fn: (adminDb: any) => Promise<void>) {
-  const adminCtx = testEnv.withSecurityRulesDisabled();
-  const adminDb = adminCtx.firestore();
-  await fn(adminDb);
-  await adminCtx.cleanup();
+  await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
+    await fn(adminCtx.firestore());
+  });
 }
 
 describe("users/{uid}", () => {
