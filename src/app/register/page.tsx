@@ -11,7 +11,6 @@ import {
 import { auth } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { portalPathForRole } from "@/lib/auth/portalPathForRole";
-import type { Role } from "@/types/models";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -35,26 +34,13 @@ export default function RegisterPage() {
     });
   }
 
-  async function waitForRoleClaim(
-    maxAttempts = 8,
-    delayMs = 500
-  ): Promise<Role | null> {
+  async function waitForRoleClaim(maxAttempts = 8, delayMs = 500) {
     for (let i = 0; i < maxAttempts; i++) {
       await refreshClaims();
       const token = await auth.currentUser?.getIdTokenResult();
-      const role = token?.claims.role;
-      if (
-        role === "admin" ||
-        role === "finance" ||
-        role === "staff" ||
-        role === "rider" ||
-        role === "customer"
-      ) {
-        return role;
-      }
+      if (token?.claims.role) return;
       await new Promise((res) => setTimeout(res, delayMs));
     }
-    return null;
   }
 
   async function handleSubmit(e: React.FormEvent) {

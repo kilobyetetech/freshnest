@@ -12,16 +12,15 @@ export default function CustomerDashboard() {
     <main className="page">
       <h1>Welcome{user?.displayName ? `, ${user.displayName}` : ""}</h1>
 
-      <div className="card">
-        <strong>Orders</strong>
-        <p style={{ color: "#666", fontSize: 14 }}>
-          Ordering isn&rsquo;t available yet — this ships in Phase 2. There is
-          nothing to show here yet, so nothing is shown.
-        </p>
-      </div>
-
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <Link className="button" href="/customer/profile" style={{ textAlign: "center", textDecoration: "none" }}>
+        <Link className="button" href="/customer/orders" style={{ textAlign: "center", textDecoration: "none" }}>
+          My orders
+        </Link>
+        <Link
+          className="button"
+          href="/customer/profile"
+          style={{ textAlign: "center", textDecoration: "none", background: "#333" }}
+        >
           My profile
         </Link>
         <Link

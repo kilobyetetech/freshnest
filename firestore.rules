@@ -101,5 +101,91 @@ service cloud.firestore {
     // No client path at all, in any direction, for any role. Matches the
     // catch-all above by omission — listed here only as documentation.
     // match /auditLogs/{logId} { allow read, write: if false; }
+
+    // =====================================================================
+    // PHASE 2 — services, serviceAreas, orders, payments, paymentAccounts,
+    // pickupJobs. Everything else (wallets, refundRequests, riderKpiDaily,
+    // riderEarnings, expenses, inventoryItems, supportTickets, notifications,
+    // financialReportsMonthly, etc.) is still intentionally unmatched and
+    // falls through to the default-deny catch-all above.
+    // =====================================================================
+
+    // ---------- services/{serviceId} ----------
+    // Live pricing source of truth. Public read of active services only;
+    // all writes are Admin-only, direct (small, low-risk writes — no
+    // Function needed here per the architecture, since there's no
+    // multi-document transaction or side effect involved in a price edit
+    // itself; the audit-log entry for it is written by the Admin's own
+    // client-side call to a lightweight logging path is NOT permitted --
+    // price-change audit logging happens via the createOrder/other
+    // Functions reading the price, not via a rule-level side effect).
+    match /services/{serviceId} {
+      allow read: if resource.data.active == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ---------- serviceAreas/{areaId} ----------
+    match /serviceAreas/{areaId} {
+      allow read: if true; // public, matches architecture Section 36
+      allow write: if isAdmin();
+    }
+
+    // ---------- orders/{orderId} ----------
+    // THREE SEPARATE STATUS FIELDS, each writable only through its own
+    // Function/API route (never directly by any client role):
+    // orderStatus, paymentStatus, refundStatus. pricingSnapshot is
+    // write-once at creation and never touched again by any path.
+    match /orders/{orderId} {
+      allow read: if isSignedIn() && (
+        resource.data.customerId == request.auth.uid
+        || isAdmin() || isFinance()
+        || (hasRole('staff'))
+      );
+      // Riders never read /orders directly -- they read pickupJobs, which
+      // has no financial fields on it at all (see below).
+      allow create, update, delete: if false; // createOrder / verifyPayment / updateOrderStatus routes only, via Admin SDK
+    }
+
+    match /orders/{orderId}/statusHistory/{eventId} {
+      allow read: if isSignedIn() && (
+        get(/databases/$(database)/documents/orders/$(orderId)).data.customerId == request.auth.uid
+        || isAdmin() || isFinance() || hasRole('staff')
+      );
+      allow write: if false; // Function/route only
+    }
+
+    // ---------- payments/{paymentId} ----------
+    match /payments/{paymentId} {
+      allow read: if isSignedIn() && (
+        resource.data.customerId == request.auth.uid || isAdmin() || isFinance()
+      );
+      allow create, update, delete: if false; // submitPayment / verifyPayment routes only
+    }
+
+    // ---------- paymentAccounts/{accountId} ----------
+    match /paymentAccounts/{accountId} {
+      allow read: if resource.data.active == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ---------- pickupJobs/{jobId} ----------
+    // Deliberately excludes all payment/financial fields at the document
+    // level -- this is what makes "riders never see payment amounts" true
+    // by construction, not just by rule.
+    match /pickupJobs/{jobId} {
+      allow read: if isSignedIn() && (
+        resource.data.riderId == request.auth.uid || isAdmin() || hasRole('staff')
+      );
+      allow create, delete: if false; // Function/route only (created on payment confirmation)
+      // Riders may update only their own assigned job's status field
+      // through the allowed-transition list; Admin can reassign.
+      allow update: if isAdmin()
+        || (
+          isSignedIn()
+          && resource.data.riderId == request.auth.uid
+          && onlyChanging(['jobStatus', 'acceptedAt', 'enRouteAt', 'arrivedAt', 'completedAt'])
+        );
+    }
   }
 }
+

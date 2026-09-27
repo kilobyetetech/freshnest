@@ -35,9 +35,10 @@ afterEach(async () => {
 // Seed helper: writes directly with admin privileges, bypassing rules,
 // to set up preconditions for a test.
 async function seed(fn: (adminDb: any) => Promise<void>) {
-  await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
-    await fn(adminCtx.firestore());
-  });
+  const adminCtx = testEnv.withSecurityRulesDisabled();
+  const adminDb = adminCtx.firestore();
+  await fn(adminDb);
+  await adminCtx.cleanup();
 }
 
 describe("users/{uid}", () => {
@@ -203,13 +204,143 @@ describe("riders/{riderId}", () => {
 describe("default-deny catch-all (future-phase collections)", () => {
   it("denies everyone, including Admin, on collections with no Phase 1 rule block yet", async () => {
     const adminClientDb = testEnv.authenticatedContext("admin1", { role: "admin" }).firestore();
-    await assertFails(getDoc(doc(adminClientDb, "orders/order1")));
-    await assertFails(setDoc(doc(adminClientDb, "orders/order1"), { total: 1000 }));
+    await assertFails(getDoc(doc(adminClientDb, "wallets/alice")));
 
     const financeDb = testEnv.authenticatedContext("fin1", { role: "finance" }).firestore();
-    await assertFails(getDoc(doc(financeDb, "wallets/alice")));
+    await assertFails(getDoc(doc(financeDb, "refundRequests/req1")));
 
     const customerDb = testEnv.authenticatedContext("alice", { role: "customer" }).firestore();
     await assertFails(getDoc(doc(customerDb, "auditLogs/log1")));
+  });
+});
+
+describe("Phase 2 — services & serviceAreas", () => {
+  it("allows public read of an active service, denies an inactive one to non-admins", async () => {
+    await seed((adminDb) => setDoc(doc(adminDb, "services/svc1"), { name: "Wash", active: true }));
+    const anon = testEnv.unauthenticatedContext().firestore();
+    await assertSucceeds(getDoc(doc(anon, "services/svc1")));
+
+    await seed((adminDb) => setDoc(doc(adminDb, "services/svc2"), { name: "Old", active: false }));
+    await assertFails(getDoc(doc(anon, "services/svc2")));
+  });
+
+  it("denies a customer writing to services", async () => {
+    const db = testEnv.authenticatedContext("alice", { role: "customer" }).firestore();
+    await assertFails(setDoc(doc(db, "services/svc3"), { name: "Hack", active: true }));
+  });
+
+  it("allows public read of serviceAreas", async () => {
+    await seed((adminDb) => setDoc(doc(adminDb, "serviceAreas/area1"), { name: "Lekki", active: true }));
+    const anon = testEnv.unauthenticatedContext().firestore();
+    await assertSucceeds(getDoc(doc(anon, "serviceAreas/area1")));
+  });
+});
+
+describe("Phase 2 — orders (PRIVILEGE ESCALATION focus)", () => {
+  it("denies a customer creating their own order document directly", async () => {
+    const db = testEnv.authenticatedContext("alice", { role: "customer" }).firestore();
+    await assertFails(
+      setDoc(doc(db, "orders/order1"), {
+        customerId: "alice",
+        orderStatus: "Pending",
+        paymentStatus: "Unpaid",
+        pricingSnapshot: { total: 1 },
+      })
+    );
+  });
+
+  it("PRIVILEGE ESCALATION: denies a customer overwriting their own order's pricingSnapshot or paymentStatus", async () => {
+    await seed((adminDb) =>
+      setDoc(doc(adminDb, "orders/order1"), {
+        customerId: "alice",
+        orderStatus: "Pending",
+        paymentStatus: "Unpaid",
+        pricingSnapshot: { total: 5000 },
+      })
+    );
+    const db = testEnv.authenticatedContext("alice", { role: "customer" }).firestore();
+    await assertFails(updateDoc(doc(db, "orders/order1"), { "pricingSnapshot.total": 1 }));
+    await assertFails(updateDoc(doc(db, "orders/order1"), { paymentStatus: "Confirmed" }));
+    await assertFails(updateDoc(doc(db, "orders/order1"), { orderStatus: "Completed" }));
+  });
+
+  it("allows the owning customer to read their own order, denies another customer", async () => {
+    await seed((adminDb) =>
+      setDoc(doc(adminDb, "orders/order1"), { customerId: "alice", orderStatus: "Pending" })
+    );
+    const aliceDb = testEnv.authenticatedContext("alice", { role: "customer" }).firestore();
+    await assertSucceeds(getDoc(doc(aliceDb, "orders/order1")));
+
+    const bobDb = testEnv.authenticatedContext("bob", { role: "customer" }).firestore();
+    await assertFails(getDoc(doc(bobDb, "orders/order1")));
+  });
+
+  it("denies a rider reading an order document directly (riders use pickupJobs instead)", async () => {
+    await seed((adminDb) =>
+      setDoc(doc(adminDb, "orders/order1"), { customerId: "alice", orderStatus: "Pending" })
+    );
+    const riderDb = testEnv.authenticatedContext("rider1", { role: "rider" }).firestore();
+    await assertFails(getDoc(doc(riderDb, "orders/order1")));
+  });
+});
+
+describe("Phase 2 — payments (financial isolation)", () => {
+  it("RIDER FINANCIAL ISOLATION: denies a rider reading a payment document", async () => {
+    await seed((adminDb) =>
+      setDoc(doc(adminDb, "payments/pay1"), { customerId: "alice", amountExpected: 5000 })
+    );
+    const riderDb = testEnv.authenticatedContext("rider1", { role: "rider" }).firestore();
+    await assertFails(getDoc(doc(riderDb, "payments/pay1")));
+  });
+
+  it("denies a customer creating a payment document directly (must go through submit-payment route)", async () => {
+    const db = testEnv.authenticatedContext("alice", { role: "customer" }).firestore();
+    await assertFails(setDoc(doc(db, "payments/pay1"), { customerId: "alice", status: "confirmed" }));
+  });
+
+  it("allows Finance to read any payment", async () => {
+    await seed((adminDb) => setDoc(doc(adminDb, "payments/pay1"), { customerId: "alice" }));
+    const finDb = testEnv.authenticatedContext("fin1", { role: "finance" }).firestore();
+    await assertSucceeds(getDoc(doc(finDb, "payments/pay1")));
+  });
+});
+
+describe("Phase 2 — pickupJobs (rider isolation and allowed self-updates)", () => {
+  it("RIDER FINANCIAL ISOLATION: pickupJobs documents carry no financial fields, and a rider cannot smuggle one in via update", async () => {
+    await seed((adminDb) =>
+      setDoc(doc(adminDb, "pickupJobs/job1"), {
+        riderId: "rider1",
+        jobStatus: "Assigned",
+        customerName: "Alice",
+      })
+    );
+    const riderDb = testEnv.authenticatedContext("rider1", { role: "rider" }).firestore();
+    await assertFails(updateDoc(doc(riderDb, "pickupJobs/job1"), { amountExpected: 5000 } as any));
+  });
+
+  it("allows the assigned rider to update jobStatus and its timestamp field", async () => {
+    await seed((adminDb) =>
+      setDoc(doc(adminDb, "pickupJobs/job1"), { riderId: "rider1", jobStatus: "Assigned" })
+    );
+    const riderDb = testEnv.authenticatedContext("rider1", { role: "rider" }).firestore();
+    await assertSucceeds(
+      updateDoc(doc(riderDb, "pickupJobs/job1"), { jobStatus: "Accepted", acceptedAt: new Date() })
+    );
+  });
+
+  it("denies a different rider from updating a job not assigned to them", async () => {
+    await seed((adminDb) =>
+      setDoc(doc(adminDb, "pickupJobs/job1"), { riderId: "rider1", jobStatus: "Assigned" })
+    );
+    const otherRiderDb = testEnv.authenticatedContext("rider2", { role: "rider" }).firestore();
+    await assertFails(updateDoc(doc(otherRiderDb, "pickupJobs/job1"), { jobStatus: "Accepted" }));
+  });
+
+  it("denies a customer reading a pickupJob even if it's for their own order", async () => {
+    await seed((adminDb) =>
+      setDoc(doc(adminDb, "pickupJobs/job1"), { riderId: "rider1", orderId: "order1" })
+    );
+    const customerDb = testEnv.authenticatedContext("alice", { role: "customer" }).firestore();
+    await assertFails(getDoc(doc(customerDb, "pickupJobs/job1")));
   });
 });
