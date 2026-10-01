@@ -11,6 +11,7 @@ import {
 } from "@/lib/firestore/addresses";
 import { getCustomerProfile } from "@/lib/firestore/profile";
 import { listServiceAreas } from "@/lib/firestore/catalog";
+import { Icon } from "@/components/Icon";
 import type { AddressDoc, ServiceAreaDoc } from "@/types/models";
 
 type AddressWithId = AddressDoc & { id: string };
@@ -38,8 +39,9 @@ export default function AddressesPage() {
     ]);
     setAddresses(list);
     setDefaultId(profile?.defaultAddressId ?? null);
-    setAreas(areaList.filter((a) => a.active));
-    if (areaList.length && !serviceAreaId) setServiceAreaId(areaList[0].id);
+    const active = areaList.filter((a) => a.active);
+    setAreas(active);
+    if (active.length && !serviceAreaId) setServiceAreaId(active[0].id);
     setLoading(false);
   }
 
@@ -70,9 +72,7 @@ export default function AddressesPage() {
     if (!user) return;
     setError(null);
     try {
-      if (defaultId === addressId) {
-        await setDefaultAddress(user.uid, null);
-      }
+      if (defaultId === addressId) await setDefaultAddress(user.uid, null);
       await deleteAddress(addressId);
       await refresh();
     } catch (err) {
@@ -98,90 +98,56 @@ export default function AddressesPage() {
       <h1>My addresses</h1>
       {error && <p className="error">{error}</p>}
 
-      {addresses.length === 0 && (
-        <p style={{ color: "#666", fontSize: 14 }}>No addresses yet — add one below.</p>
+      {addresses.length === 0 ? (
+        <div className="empty" style={{ marginBottom: 20 }}>
+          <strong>No addresses yet</strong>
+          Add one below so we know where to pick up and drop off.
+        </div>
+      ) : (
+        <div className="list-group" style={{ marginBottom: 24 }}>
+          {addresses.map((a) => (
+            <div key={a.id} className="list-row" style={{ cursor: "default", flexWrap: "wrap" }}>
+              <span className="list-icon"><Icon name="pin" /></span>
+              <span className="list-text">
+                <span className="list-title">
+                  {a.label} {defaultId === a.id && <span className="badge accent" style={{ marginLeft: 6 }}>Default</span>}
+                </span>
+                <span className="list-sub">{a.line1}, {a.city}</span>
+                {!a.serviceAreaId && (
+                  <span className="list-sub" style={{ color: "var(--danger)" }}>No service area — can&rsquo;t be used to order</span>
+                )}
+              </span>
+              <div className="actions" style={{ marginTop: 0 }}>
+                {defaultId !== a.id && (
+                  <button className="button secondary small" onClick={() => handleSetDefault(a.id)}>Default</button>
+                )}
+                <button className="button danger small" onClick={() => handleDelete(a.id)}>Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
-      {addresses.map((a) => (
-        <div className="card" key={a.id}>
-          <strong>{a.label}</strong>
-          {defaultId === a.id && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: "#1a7f4e" }}>Default</span>
-          )}
-          <p style={{ margin: "4px 0", fontSize: 14, color: "#444" }}>
-            {a.line1}, {a.city}
-          </p>
-          {!a.serviceAreaId && (
-            <p style={{ fontSize: 12, color: "#b00020" }}>
-              No service area set — this address can&rsquo;t be used to place an order yet.
+      <div className="section-title">Add an address</div>
+      <div className="card">
+        <form onSubmit={handleAdd}>
+          <input className="field" placeholder="Label (e.g. Home)" value={label} onChange={(e) => setLabel(e.target.value)} required />
+          <input className="field" placeholder="Street address" value={line1} onChange={(e) => setLine1(e.target.value)} required />
+          <input className="field" placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} required />
+          {areas.length > 0 ? (
+            <select className="field" value={serviceAreaId} onChange={(e) => setServiceAreaId(e.target.value)}>
+              {areas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          ) : (
+            <p className="muted" style={{ fontSize: "0.85rem" }}>
+              No service areas are set up yet — an Admin needs to add one before addresses can be used for ordering.
             </p>
           )}
-          <div style={{ display: "flex", gap: 8 }}>
-            {defaultId !== a.id && (
-              <button
-                className="button"
-                style={{ background: "#333", fontSize: 13, padding: 8 }}
-                onClick={() => handleSetDefault(a.id)}
-              >
-                Set as default
-              </button>
-            )}
-            <button
-              className="button"
-              style={{ background: "#b00020", fontSize: 13, padding: 8 }}
-              onClick={() => handleDelete(a.id)}
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      ))}
-
-      <h2 style={{ marginTop: 24 }}>Add an address</h2>
-      <form onSubmit={handleAdd}>
-        <input
-          className="field"
-          placeholder="Label (e.g. Home)"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          required
-        />
-        <input
-          className="field"
-          placeholder="Street address"
-          value={line1}
-          onChange={(e) => setLine1(e.target.value)}
-          required
-        />
-        <input
-          className="field"
-          placeholder="City"
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
-          required
-        />
-        {areas.length > 0 ? (
-          <select
-            className="field"
-            value={serviceAreaId}
-            onChange={(e) => setServiceAreaId(e.target.value)}
-          >
-            {areas.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <p style={{ fontSize: 13, color: "#b00020" }}>
-            No service areas are set up yet — an Admin needs to add one before addresses can be
-            used for ordering.
-          </p>
-        )}
-        <button className="button" type="submit" disabled={adding}>
-          {adding ? "Adding…" : "Add address"}
-        </button>
-      </form>
+          <button className="button" type="submit" disabled={adding}>
+            {adding ? "Adding…" : "Add address"}
+          </button>
+        </form>
+      </div>
     </main>
   );
 }

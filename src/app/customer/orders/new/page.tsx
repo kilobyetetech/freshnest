@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { listActiveServices } from "@/lib/firestore/catalog";
 import { listMyAddresses } from "@/lib/firestore/addresses";
 import { auth } from "@/lib/firebase/client";
+import { Icon } from "@/components/Icon";
 import type { ServiceDoc, AddressDoc } from "@/types/models";
 
 type ServiceWithId = ServiceDoc & { id: string };
@@ -27,8 +28,9 @@ export default function NewOrderPage() {
     if (!user) return;
     Promise.all([listActiveServices(), listMyAddresses(user.uid)]).then(([s, a]) => {
       setServices(s);
-      setAddresses(a.filter((addr) => addr.serviceAreaId));
-      if (a.length) setAddressId(a.find((addr) => addr.serviceAreaId)?.id ?? "");
+      const withArea = a.filter((addr) => addr.serviceAreaId);
+      setAddresses(withArea);
+      if (withArea.length) setAddressId(withArea[0].id);
       setLoading(false);
     });
   }, [user]);
@@ -74,10 +76,10 @@ export default function NewOrderPage() {
     return (
       <main className="page">
         <h1>New order</h1>
-        <p style={{ color: "#666", fontSize: 14 }}>
-          You need an address with a service area assigned before you can order. Add one on the{" "}
-          <a href="/customer/addresses">addresses page</a>.
-        </p>
+        <div className="empty">
+          <strong>You need an address first</strong>
+          Add one with a service area on the <a href="/customer/addresses">addresses page</a>.
+        </div>
       </main>
     );
   }
@@ -86,47 +88,51 @@ export default function NewOrderPage() {
     return (
       <main className="page">
         <h1>New order</h1>
-        <p style={{ color: "#666", fontSize: 14 }}>
-          No services are available to order yet — check back soon.
-        </p>
+        <div className="empty">
+          <strong>Nothing to order yet</strong>
+          No services are available right now — check back soon.
+        </div>
       </main>
     );
   }
+
+  const selectedCount = Object.values(quantities).filter((q) => Number(q) > 0).length;
 
   return (
     <main className="page">
       <h1>New order</h1>
       {error && <p className="error">{error}</p>}
       <form onSubmit={handleSubmit}>
-        <label style={{ fontSize: 14, color: "#666" }}>Deliver to</label>
+        <label>Deliver to</label>
         <select className="field" value={addressId} onChange={(e) => setAddressId(e.target.value)}>
           {addresses.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.label} — {a.line1}
-            </option>
+            <option key={a.id} value={a.id}>{a.label} — {a.line1}</option>
           ))}
         </select>
 
-        <label style={{ fontSize: 14, color: "#666" }}>Items</label>
-        {services.map((s) => (
-          <div key={s.id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <strong>{s.name}</strong>
-              <p style={{ fontSize: 13, color: "#666", margin: 0 }}>
-                ₦{s.unitPrice} {s.pricingModel === "per_kg" ? "/kg" : s.pricingModel === "flat" ? "flat" : "/item"}
-              </p>
+        <div className="section-title" style={{ marginTop: 20 }}>Items</div>
+        <div className="list-group" style={{ marginBottom: 16 }}>
+          {services.map((s) => (
+            <div key={s.id} className="list-row" style={{ cursor: "default" }}>
+              <span className="list-icon"><Icon name="tag" /></span>
+              <span className="list-text">
+                <span className="list-title">{s.name}</span>
+                <span className="list-sub">
+                  ₦{s.unitPrice} {s.pricingModel === "per_kg" ? "/kg" : s.pricingModel === "flat" ? "flat" : "/item"}
+                </span>
+              </span>
+              <input
+                type="number"
+                min={0}
+                className="field"
+                style={{ width: 64, marginBottom: 0, textAlign: "center", padding: 8 }}
+                placeholder="0"
+                value={quantities[s.id] ?? ""}
+                onChange={(e) => setQuantities({ ...quantities, [s.id]: e.target.value })}
+              />
             </div>
-            <input
-              type="number"
-              min={0}
-              className="field"
-              style={{ width: 70, marginBottom: 0 }}
-              placeholder="0"
-              value={quantities[s.id] ?? ""}
-              onChange={(e) => setQuantities({ ...quantities, [s.id]: e.target.value })}
-            />
-          </div>
-        ))}
+          ))}
+        </div>
 
         <input
           className="field"
@@ -135,7 +141,7 @@ export default function NewOrderPage() {
           onChange={(e) => setPromotionCode(e.target.value)}
         />
 
-        <button className="button" type="submit" disabled={busy}>
+        <button className="button" type="submit" disabled={busy || !selectedCount}>
           {busy ? "Placing order…" : "Place order"}
         </button>
       </form>

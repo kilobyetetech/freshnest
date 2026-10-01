@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase/client";
 import { listPendingPayments } from "@/lib/firestore/orders";
+import { auth } from "@/lib/firebase/client";
+import { Icon } from "@/components/Icon";
 
 export default function FinanceDashboard() {
   const [payments, setPayments] = useState<Array<Record<string, unknown> & { id: string }>>([]);
@@ -50,46 +50,53 @@ export default function FinanceDashboard() {
   return (
     <main className="page">
       <h1>Finance</h1>
-      {error && <p className="error">{error}</p>}
 
-      <div className="card">
-        <strong>Payments awaiting verification</strong>
+      <div className="stat-band" style={{ marginBottom: 24 }}>
+        <div className="stat">
+          <div className={`stat-value ${payments.length ? "attention" : ""}`}>{payments.length}</div>
+          <div className="stat-label">Awaiting verification</div>
+        </div>
       </div>
 
-      {payments.length === 0 && (
-        <p style={{ color: "#666", fontSize: 14 }}>Nothing pending right now.</p>
-      )}
+      <div className="section-title">Payments awaiting verification</div>
+      {error && <p className="error">{error}</p>}
 
-      {payments.map((p) => (
-        <div className="card" key={p.id}>
-          <strong>₦{p.amountExpected as number}</strong>
-          <p style={{ fontSize: 13, color: "#444", margin: "4px 0" }}>
-            Ref: {p.transactionReference as string}
-          </p>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              className="button"
-              style={{ background: "#1a7f4e", fontSize: 13, padding: 8 }}
-              disabled={busyId === p.id}
-              onClick={() => handleDecision(p.id, "confirm")}
-            >
-              Confirm
-            </button>
-            <button
-              className="button"
-              style={{ background: "#b00020", fontSize: 13, padding: 8 }}
-              disabled={busyId === p.id}
-              onClick={() => handleDecision(p.id, "reject")}
-            >
-              Reject
-            </button>
-          </div>
+      {payments.length === 0 ? (
+        <div className="empty">
+          <strong>All caught up</strong>
+          Nothing is waiting on you right now.
         </div>
-      ))}
-
-      <button className="button" style={{ background: "#999", marginTop: 16 }} onClick={() => signOut(auth)}>
-        Log out
-      </button>
+      ) : (
+        payments.map((p) => (
+          <div className="card" key={p.id}>
+            <div className="row-between">
+              <strong style={{ fontFamily: "var(--font-display)", fontSize: "1.2rem" }}>
+                ₦{p.amountExpected as number}
+              </strong>
+              <Icon name="receipt" />
+            </div>
+            <p className="muted" style={{ fontSize: "0.88rem", margin: "4px 0 12px" }}>
+              Ref: {p.transactionReference as string}
+            </p>
+            <div className="actions">
+              <button
+                className="button small"
+                disabled={busyId === p.id}
+                onClick={() => handleDecision(p.id, "confirm")}
+              >
+                Confirm
+              </button>
+              <button
+                className="button danger small"
+                disabled={busyId === p.id}
+                onClick={() => handleDecision(p.id, "reject")}
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+        ))
+      )}
     </main>
   );
 }

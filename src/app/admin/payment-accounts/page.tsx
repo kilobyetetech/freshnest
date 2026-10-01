@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { listAllPaymentAccounts, createPaymentAccount, updatePaymentAccount } from "@/lib/firestore/adminCatalog";
+import { Icon } from "@/components/Icon";
 import type { PaymentAccountDoc } from "@/types/models";
 
 type AccountWithId = PaymentAccountDoc & { id: string };
@@ -56,58 +57,43 @@ export default function AdminPaymentAccountsPage() {
       <h1>Payment accounts</h1>
       {error && <p className="error">{error}</p>}
 
-      {accounts.map((a) => (
-        <div className="card" key={a.id}>
-          <strong>{a.bankName}</strong>{" "}
-          <span style={{ fontSize: 12, color: a.active ? "#1a7f4e" : "#999" }}>
-            {a.active ? "Active" : "Inactive"}
-          </span>
-          <p style={{ margin: "4px 0", fontSize: 14, color: "#444" }}>
-            {a.accountName} — {a.accountNumber}
-          </p>
-          <button
-            className="button"
-            style={{ background: a.active ? "#b00020" : "#1a7f4e", fontSize: 13, padding: 8 }}
-            onClick={() => toggleActive(a)}
-          >
-            {a.active ? "Deactivate" : "Activate"}
-          </button>
+      {accounts.length === 0 ? (
+        <div className="empty" style={{ marginBottom: 20 }}>
+          <strong>No payment accounts yet</strong>
+          Add one below so customers know where to send transfers.
         </div>
-      ))}
+      ) : (
+        <div className="list-group" style={{ marginBottom: 24 }}>
+          {accounts.map((a) => (
+            <div key={a.id} className="list-row" style={{ cursor: "default" }}>
+              <span className="list-icon"><Icon name="card" /></span>
+              <span className="list-text">
+                <span className="list-title">{a.bankName}</span>
+                <span className="list-sub">{a.accountName} — {a.accountNumber}</span>
+              </span>
+              <span className={`badge ${a.active ? "ok" : ""}`} style={{ marginRight: 8 }}>
+                {a.active ? "Active" : "Inactive"}
+              </span>
+              <button className="button secondary small" onClick={() => toggleActive(a)}>
+                {a.active ? "Turn off" : "Turn on"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <h2 style={{ marginTop: 24 }}>Add a payment account</h2>
-      <form onSubmit={handleCreate}>
-        <input
-          className="field"
-          placeholder="Bank name"
-          value={bankName}
-          onChange={(e) => setBankName(e.target.value)}
-          required
-        />
-        <input
-          className="field"
-          placeholder="Account name"
-          value={accountName}
-          onChange={(e) => setAccountName(e.target.value)}
-          required
-        />
-        <input
-          className="field"
-          placeholder="Account number"
-          value={accountNumber}
-          onChange={(e) => setAccountNumber(e.target.value)}
-          required
-        />
-        <input
-          className="field"
-          placeholder="Instructions (optional)"
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-        />
-        <button className="button" type="submit" disabled={busy}>
-          {busy ? "Saving…" : "Add account"}
-        </button>
-      </form>
+      <div className="section-title">Add a payment account</div>
+      <div className="card">
+        <form onSubmit={handleCreate}>
+          <input className="field" placeholder="Bank name" value={bankName} onChange={(e) => setBankName(e.target.value)} required />
+          <input className="field" placeholder="Account name" value={accountName} onChange={(e) => setAccountName(e.target.value)} required />
+          <input className="field" placeholder="Account number" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} required />
+          <input className="field" placeholder="Instructions (optional)" value={instructions} onChange={(e) => setInstructions(e.target.value)} />
+          <button className="button" type="submit" disabled={busy}>
+            {busy ? "Saving…" : "Add account"}
+          </button>
+        </form>
+      </div>
     </main>
   );
 }

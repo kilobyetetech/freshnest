@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { auth } from "@/lib/firebase/client";
+import { Icon } from "@/components/Icon";
 
 type StaffRole = "admin" | "finance" | "staff" | "rider";
 
@@ -23,21 +24,11 @@ export default function ProvisionStaffPage() {
       const idToken = await auth.currentUser?.getIdToken();
       const res = await fetch("/api/provision-staff-user", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          email,
-          phone: phone || undefined,
-          displayName,
-          role,
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ email, phone: phone || undefined, displayName, role }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Provisioning failed.");
-      }
+      if (!res.ok) throw new Error(data.error || "Provisioning failed.");
       setResult(data);
       setEmail("");
       setPhone("");
@@ -54,48 +45,26 @@ export default function ProvisionStaffPage() {
       <h1>Provision staff account</h1>
       {error && <p className="error">{error}</p>}
       {result && (
-        <p style={{ color: "#1a7f4e", fontSize: 14 }}>
-          Created {result.role} account (uid: {result.uid}).
+        <p className="badge ok" style={{ marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name="user" size={14} /> Created {result.role} account
         </p>
       )}
-      <form onSubmit={handleSubmit}>
-        <input
-          className="field"
-          type="text"
-          placeholder="Full name"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          required
-        />
-        <input
-          className="field"
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <input
-          className="field"
-          type="tel"
-          placeholder="Phone (optional)"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-        />
-        <select
-          className="field"
-          value={role}
-          onChange={(e) => setRole(e.target.value as StaffRole)}
-        >
-          <option value="staff">Staff</option>
-          <option value="finance">Finance</option>
-          <option value="rider">Rider</option>
-          <option value="admin">Admin</option>
-        </select>
-        <button className="button" type="submit" disabled={busy}>
-          {busy ? "Provisioning…" : "Create account"}
-        </button>
-      </form>
+      <div className="card">
+        <form onSubmit={handleSubmit}>
+          <input className="field" type="text" placeholder="Full name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
+          <input className="field" type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <input className="field" type="tel" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <select className="field" value={role} onChange={(e) => setRole(e.target.value as StaffRole)}>
+            <option value="staff">Staff</option>
+            <option value="finance">Finance</option>
+            <option value="rider">Rider</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button className="button" type="submit" disabled={busy}>
+            {busy ? "Provisioning…" : "Create account"}
+          </button>
+        </form>
+      </div>
     </main>
   );
 }

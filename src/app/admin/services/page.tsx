@@ -2,9 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { listAllServices, createService, updateService } from "@/lib/firestore/adminCatalog";
+import { Icon } from "@/components/Icon";
 import type { ServiceDoc, PricingModel } from "@/types/models";
 
 type ServiceWithId = ServiceDoc & { id: string };
+
+const MODEL_LABEL: Record<PricingModel, string> = {
+  per_item: "/item",
+  per_kg: "/kg",
+  flat: "flat",
+  custom_quote: "custom quote",
+};
 
 export default function AdminServicesPage() {
   const [services, setServices] = useState<ServiceWithId[]>([]);
@@ -62,70 +70,51 @@ export default function AdminServicesPage() {
       <h1>Services & pricing</h1>
       {error && <p className="error">{error}</p>}
 
-      {services.map((s) => (
-        <div className="card" key={s.id}>
-          <strong>{s.name}</strong>{" "}
-          <span style={{ fontSize: 12, color: s.active ? "#1a7f4e" : "#999" }}>
-            {s.active ? "Active" : "Inactive"}
-          </span>
-          <p style={{ margin: "4px 0", fontSize: 14, color: "#444" }}>
-            {s.pricingModel} — ₦{s.unitPrice} — min order ₦{s.minOrder} — {s.turnaroundHours}h turnaround
-          </p>
-          <button
-            className="button"
-            style={{ background: s.active ? "#b00020" : "#1a7f4e", fontSize: 13, padding: 8 }}
-            onClick={() => toggleActive(s)}
-          >
-            {s.active ? "Deactivate" : "Activate"}
-          </button>
+      {services.length === 0 ? (
+        <div className="empty" style={{ marginBottom: 20 }}>
+          <strong>No services yet</strong>
+          Add your first one below — customers can only order active services.
         </div>
-      ))}
+      ) : (
+        <div className="list-group" style={{ marginBottom: 24 }}>
+          {services.map((s) => (
+            <div key={s.id} className="list-row" style={{ cursor: "default" }}>
+              <span className="list-icon"><Icon name="tag" /></span>
+              <span className="list-text">
+                <span className="list-title">{s.name}</span>
+                <span className="list-sub">
+                  ₦{s.unitPrice} {MODEL_LABEL[s.pricingModel]} · min ₦{s.minOrder} · {s.turnaroundHours}h
+                </span>
+              </span>
+              <span className={`badge ${s.active ? "ok" : ""}`} style={{ marginRight: 8 }}>
+                {s.active ? "Active" : "Inactive"}
+              </span>
+              <button className="button secondary small" onClick={() => toggleActive(s)}>
+                {s.active ? "Turn off" : "Turn on"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <h2 style={{ marginTop: 24 }}>Add a service</h2>
-      <form onSubmit={handleCreate}>
-        <input
-          className="field"
-          placeholder="Name (e.g. Shirt wash)"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-        <select
-          className="field"
-          value={pricingModel}
-          onChange={(e) => setPricingModel(e.target.value as PricingModel)}
-        >
-          <option value="per_item">Per item</option>
-          <option value="per_kg">Per kg</option>
-          <option value="flat">Flat rate</option>
-          <option value="custom_quote">Custom quote</option>
-        </select>
-        <input
-          className="field"
-          type="number"
-          placeholder="Unit price (₦)"
-          value={unitPrice}
-          onChange={(e) => setUnitPrice(e.target.value)}
-          required
-        />
-        <input
-          className="field"
-          type="number"
-          placeholder="Minimum order (₦)"
-          value={minOrder}
-          onChange={(e) => setMinOrder(e.target.value)}
-        />
-        <input
-          className="field"
-          type="number"
-          placeholder="Turnaround (hours)"
-          value={turnaroundHours}
-          onChange={(e) => setTurnaroundHours(e.target.value)}
-        />
-        <button className="button" type="submit" disabled={busy}>
-          {busy ? "Saving…" : "Add service"}
-        </button>
-      </form>
+      <div className="section-title">Add a service</div>
+      <div className="card">
+        <form onSubmit={handleCreate}>
+          <input className="field" placeholder="Name (e.g. Shirt wash)" value={name} onChange={(e) => setName(e.target.value)} required />
+          <select className="field" value={pricingModel} onChange={(e) => setPricingModel(e.target.value as PricingModel)}>
+            <option value="per_item">Per item</option>
+            <option value="per_kg">Per kg</option>
+            <option value="flat">Flat rate</option>
+            <option value="custom_quote">Custom quote</option>
+          </select>
+          <input className="field" type="number" placeholder="Unit price (₦)" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} required />
+          <input className="field" type="number" placeholder="Minimum order (₦)" value={minOrder} onChange={(e) => setMinOrder(e.target.value)} />
+          <input className="field" type="number" placeholder="Turnaround (hours)" value={turnaroundHours} onChange={(e) => setTurnaroundHours(e.target.value)} />
+          <button className="button" type="submit" disabled={busy}>
+            {busy ? "Saving…" : "Add service"}
+          </button>
+        </form>
+      </div>
     </main>
   );
 }
