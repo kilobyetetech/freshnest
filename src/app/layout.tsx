@@ -5,6 +5,11 @@ import "./globals.css";
 export const metadata = {
   title: "FreshNest Laundry",
   description: "Laundry pickup, cleaning, and delivery.",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export const viewport = {
