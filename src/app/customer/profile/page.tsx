@@ -46,18 +46,20 @@ export default function ProfilePage() {
     <main className="page">
       <h1>My profile</h1>
       {error && <p className="error">{error}</p>}
-      <form onSubmit={handleSave}>
-        <label style={{ fontSize: 14, color: "#666" }}>Name</label>
-        <input className="field" value={name} onChange={(e) => setName(e.target.value)} required />
-        <label style={{ fontSize: 14, color: "#666" }}>Phone</label>
-        <input className="field" value={phone} onChange={(e) => setPhone(e.target.value)} />
-        <label style={{ fontSize: 14, color: "#666" }}>Email</label>
-        <input className="field" value={profile?.email ?? ""} disabled />
-        <button className="button" type="submit" disabled={saving}>
-          {saving ? "Saving…" : "Save changes"}
-        </button>
-        {savedAt && <p style={{ color: "#1a7f4e", fontSize: 14 }}>Saved.</p>}
-      </form>
+      <div className="card">
+        <form onSubmit={handleSave}>
+          <label>Name</label>
+          <input className="field" value={name} onChange={(e) => setName(e.target.value)} required />
+          <label>Phone</label>
+          <input className="field" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <label>Email</label>
+          <input className="field" value={profile?.email ?? ""} disabled />
+          <button className="button" type="submit" disabled={saving}>
+            {saving ? "Saving…" : "Save changes"}
+          </button>
+          {savedAt && <p className="badge ok" style={{ marginTop: 10 }}>Saved</p>}
+        </form>
+      </div>
     </main>
   );
 }

@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { getOrder, getOrderStatusHistory } from "@/lib/firestore/orders";
 import { listActivePaymentAccounts } from "@/lib/firestore/catalog";
 import { auth } from "@/lib/firebase/client";
+import { StatusBadge, humanize } from "@/components/StatusBadge";
+import { Icon } from "@/components/Icon";
 import type { OrderDoc, PaymentAccountDoc } from "@/types/models";
 
 export default function OrderDetailPage() {
@@ -63,44 +65,55 @@ export default function OrderDetailPage() {
   return (
     <main className="page">
       <h1>Order</h1>
+
       <div className="card">
-        <strong>Total: ₦{order.pricingSnapshot.total}</strong>
-        <p style={{ fontSize: 14, color: "#444", margin: "4px 0" }}>
-          {order.orderStatus} — Payment: {order.paymentStatus}
-        </p>
-        <div style={{ fontSize: 13, color: "#666" }}>
-          {order.pricingSnapshot.items.map((it, i) => (
-            <div key={i}>
-              {it.name} × {it.quantity} — ₦{it.subtotal}
-            </div>
-          ))}
-          <div>Pickup fee: ₦{order.pricingSnapshot.pickupFee}</div>
-          <div>Delivery fee: ₦{order.pricingSnapshot.deliveryFee}</div>
-          {order.pricingSnapshot.discount > 0 && <div>Discount: -₦{order.pricingSnapshot.discount}</div>}
+        <div className="row-between" style={{ marginBottom: 6 }}>
+          <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "1.4rem" }}>
+            ₦{order.pricingSnapshot.total}
+          </span>
+          <StatusBadge status={order.orderStatus} />
         </div>
+        <p className="muted" style={{ margin: "0 0 12px" }}>Payment: {humanize(order.paymentStatus)}</p>
+
+        {order.pricingSnapshot.items.map((it, i) => (
+          <div key={i} className="row-between" style={{ fontSize: "0.92rem", padding: "4px 0" }}>
+            <span>{it.name} × {it.quantity}</span>
+            <span>₦{it.subtotal}</span>
+          </div>
+        ))}
+        <div className="row-between muted" style={{ fontSize: "0.88rem", padding: "4px 0" }}>
+          <span>Pickup fee</span><span>₦{order.pricingSnapshot.pickupFee}</span>
+        </div>
+        <div className="row-between muted" style={{ fontSize: "0.88rem", padding: "4px 0" }}>
+          <span>Delivery fee</span><span>₦{order.pricingSnapshot.deliveryFee}</span>
+        </div>
+        {order.pricingSnapshot.discount > 0 && (
+          <div className="row-between" style={{ fontSize: "0.88rem", padding: "4px 0", color: "var(--ok)" }}>
+            <span>Discount</span><span>-₦{order.pricingSnapshot.discount}</span>
+          </div>
+        )}
       </div>
 
       {order.paymentStatus === "Unpaid" || order.paymentStatus === "Rejected" ? (
         <div className="card">
-          <strong>Make a payment</strong>
+          <div className="row-between" style={{ marginBottom: 8 }}>
+            <strong>Make a payment</strong>
+            <Icon name="card" />
+          </div>
           {accounts.length === 0 ? (
-            <p style={{ fontSize: 13, color: "#b00020" }}>
-              No payment account is set up yet — check back soon.
-            </p>
+            <p className="muted">No payment account is set up yet — check back soon.</p>
           ) : (
             <>
               {accounts.map((a) => (
-                <p key={a.id} style={{ fontSize: 13, color: "#444" }}>
+                <p key={a.id} className="muted" style={{ fontSize: "0.88rem" }}>
                   {a.bankName} — {a.accountName} — {a.accountNumber}
                 </p>
               ))}
               {error && <p className="error">{error}</p>}
               {success ? (
-                <p style={{ color: "#1a7f4e", fontSize: 14 }}>
-                  Submitted — awaiting verification.
-                </p>
+                <p className="badge ok" style={{ marginTop: 8 }}>Submitted — awaiting verification</p>
               ) : (
-                <form onSubmit={handleSubmitPayment}>
+                <form onSubmit={handleSubmitPayment} style={{ marginTop: 10 }}>
                   <input
                     className="field"
                     placeholder="Transaction reference"
@@ -116,19 +129,20 @@ export default function OrderDetailPage() {
             </>
           )}
         </div>
-      ) : (
-        <div className="card">
-          <strong>Payment: {order.paymentStatus}</strong>
-        </div>
-      )}
+      ) : null}
 
-      <h2 style={{ marginTop: 24 }}>History</h2>
-      {history.map((h) => (
-        <div key={h.id} className="card">
-          <strong>{h.newStatus}</strong>
-          {h.note && <p style={{ fontSize: 13, color: "#666", margin: 0 }}>{h.note}</p>}
-        </div>
-      ))}
+      <div className="section-title">History</div>
+      <div className="list-group">
+        {history.map((h) => (
+          <div key={h.id} className="list-row" style={{ cursor: "default" }}>
+            <span className="list-icon"><Icon name="receipt" /></span>
+            <span className="list-text">
+              <span className="list-title">{h.newStatus}</span>
+              {h.note && <span className="list-sub">{h.note}</span>}
+            </span>
+          </div>
+        ))}
+      </div>
     </main>
   );
 }

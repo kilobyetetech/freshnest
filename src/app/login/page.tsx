@@ -10,6 +10,7 @@ import {
 import { auth } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { portalPathForRole } from "@/lib/auth/portalPathForRole";
+import { Brand } from "@/components/Brand";
 import type { Role } from "@/types/models";
 
 export default function LoginPage() {
@@ -20,10 +21,6 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Idempotent -- if this account already has a role, the API route is
-  // a no-op. Calling it on every login (not just registration) covers
-  // the Google Sign-In case, where "sign up" and "log in" are the same
-  // button press for a brand-new account.
   async function completeSignup() {
     const idToken = await auth.currentUser?.getIdToken();
     if (!idToken) return;
@@ -46,9 +43,6 @@ export default function LoginPage() {
       }
       await new Promise((res) => setTimeout(res, 400));
     }
-    // Route straight to the correct portal for this account's role,
-    // rather than always landing on the public home page and expecting
-    // the person to know or type the right URL themselves.
     router.push(portalPathForRole(role));
   }
 
@@ -77,7 +71,7 @@ export default function LoginPage() {
       setError(
         err instanceof Error
           ? err.message
-          : "Google sign-in failed. If you're inside an in-app browser (e.g. from Snapchat/TikTok/Telegram), open this page in Chrome instead -- Google blocks sign-in inside most embedded browsers."
+          : "Google sign-in failed. If you're inside an in-app browser, open this page in Chrome instead."
       );
     } finally {
       setBusy(false);
@@ -85,23 +79,15 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="page">
-      <h1>Log in</h1>
+    <main className="auth-wrap">
+      <Brand variant="full" />
+      <h1>Welcome back</h1>
       {error && <p className="error">{error}</p>}
 
-      <button
-        type="button"
-        className="button"
-        style={{ background: "#fff", color: "#1a1a1a", border: "1px solid #ccc", marginBottom: 16 }}
-        onClick={handleGoogleSignIn}
-        disabled={busy}
-      >
+      <button type="button" className="button secondary" onClick={handleGoogleSignIn} disabled={busy}>
         Continue with Google
       </button>
-
-      <div style={{ textAlign: "center", color: "#999", fontSize: 13, marginBottom: 16 }}>
-        or use email
-      </div>
+      <div className="divider">or use email</div>
 
       <form onSubmit={handleEmailLogin}>
         <input
@@ -121,11 +107,11 @@ export default function LoginPage() {
           required
         />
         <button className="button" type="submit" disabled={busy}>
-          {busy ? "Signing in..." : "Log in"}
+          {busy ? "Signing in…" : "Log in"}
         </button>
       </form>
 
-      <p style={{ fontSize: 14, marginTop: 16 }}>
+      <p className="muted" style={{ marginTop: 20, textAlign: "center" }}>
         New here? <a href="/register">Create an account</a>
       </p>
     </main>

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { listMyOrders } from "@/lib/firestore/orders";
+import { Icon } from "@/components/Icon";
+import { StatusBadge } from "@/components/StatusBadge";
 import type { OrderDoc } from "@/types/models";
 
 export default function CustomerOrdersPage() {
@@ -24,22 +26,30 @@ export default function CustomerOrdersPage() {
   return (
     <main className="page">
       <h1>My orders</h1>
-      <Link className="button" href="/customer/orders/new" style={{ textAlign: "center", textDecoration: "none", marginBottom: 16, display: "block" }}>
-        Place a new order
+
+      <Link href="/customer/orders/new" className="button" style={{ marginBottom: 20 }}>
+        <Icon name="plus" size={18} /> Place a new order
       </Link>
 
-      {orders.length === 0 && <p style={{ color: "#666", fontSize: 14 }}>No orders yet.</p>}
-
-      {orders.map((o) => (
-        <Link key={o.id} href={`/customer/orders/${o.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-          <div className="card">
-            <strong>₦{o.pricingSnapshot?.total ?? 0}</strong>
-            <p style={{ margin: "4px 0", fontSize: 14, color: "#444" }}>
-              {o.orderStatus} — Payment: {o.paymentStatus}
-            </p>
-          </div>
-        </Link>
-      ))}
+      {orders.length === 0 ? (
+        <div className="empty">
+          <strong>No orders yet</strong>
+          Your first order will show up here once you place it.
+        </div>
+      ) : (
+        <div className="list-group">
+          {orders.map((o) => (
+            <Link key={o.id} href={`/customer/orders/${o.id}`} className="list-row">
+              <span className="list-icon"><Icon name="bag" /></span>
+              <span className="list-text">
+                <span className="list-title">₦{o.pricingSnapshot?.total ?? 0}</span>
+                <span className="list-sub">Payment: {o.paymentStatus}</span>
+              </span>
+              <StatusBadge status={o.orderStatus} />
+            </Link>
+          ))}
+        </div>
+      )}
     </main>
   );
 }

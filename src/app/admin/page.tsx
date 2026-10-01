@@ -1,38 +1,67 @@
 "use client";
 
 import Link from "next/link";
-import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase/client";
+import { Icon } from "@/components/Icon";
 
 export default function AdminDashboard() {
   return (
-    <main className="page">
+    <main className="page wide">
       <h1>Admin</h1>
-      <div className="card">
-        <strong>Operational dashboards</strong>
-        <p style={{ color: "#666", fontSize: 14 }}>
-          Finance reports, rider KPIs, and inventory ship in later phases.
-        </p>
+      <p className="muted" style={{ marginTop: -10, marginBottom: 24 }}>
+        Manage pricing, coverage, accounts, and people.
+      </p>
+
+      <div className="empty" style={{ marginBottom: 8 }}>
+        <strong>Reports are coming in a later phase</strong>
+        Order volume, revenue, and rider KPIs will live here once Finance reporting ships.
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <Link className="button" href="/admin/staff" style={{ textAlign: "center", textDecoration: "none" }}>
-          Provision staff account
+
+      <div className="section-title">Catalog & coverage</div>
+      <div className="list-group">
+        <Link href="/admin/services" className="list-row">
+          <span className="list-icon"><Icon name="tag" /></span>
+          <span className="list-text">
+            <span className="list-title">Services & pricing</span>
+            <span className="list-sub">What you offer, and what it costs</span>
+          </span>
+          <span className="chevron"><Icon name="chevron" /></span>
         </Link>
-        <Link className="button" href="/admin/services" style={{ textAlign: "center", textDecoration: "none", background: "#333" }}>
-          Services & pricing
+        <Link href="/admin/service-areas" className="list-row">
+          <span className="list-icon"><Icon name="pin" /></span>
+          <span className="list-text">
+            <span className="list-title">Service areas</span>
+            <span className="list-sub">Coverage, pickup & delivery fees</span>
+          </span>
+          <span className="chevron"><Icon name="chevron" /></span>
         </Link>
-        <Link className="button" href="/admin/service-areas" style={{ textAlign: "center", textDecoration: "none", background: "#333" }}>
-          Service areas
+        <Link href="/admin/payment-accounts" className="list-row">
+          <span className="list-icon"><Icon name="card" /></span>
+          <span className="list-text">
+            <span className="list-title">Payment accounts</span>
+            <span className="list-sub">Where customers send transfers</span>
+          </span>
+          <span className="chevron"><Icon name="chevron" /></span>
         </Link>
-        <Link className="button" href="/admin/payment-accounts" style={{ textAlign: "center", textDecoration: "none", background: "#333" }}>
-          Payment accounts
+      </div>
+
+      <div className="section-title">People</div>
+      <div className="list-group">
+        <Link href="/admin/staff" className="list-row">
+          <span className="list-icon"><Icon name="user" /></span>
+          <span className="list-text">
+            <span className="list-title">Provision staff account</span>
+            <span className="list-sub">Create Admin, Finance, Staff, or Rider logins</span>
+          </span>
+          <span className="chevron"><Icon name="chevron" /></span>
         </Link>
-        <Link className="button" href="/admin/riders" style={{ textAlign: "center", textDecoration: "none", background: "#333" }}>
-          Riders
+        <Link href="/admin/riders" className="list-row">
+          <span className="list-icon"><Icon name="bike" /></span>
+          <span className="list-text">
+            <span className="list-title">Riders</span>
+            <span className="list-sub">Active status, coverage, workload</span>
+          </span>
+          <span className="chevron"><Icon name="chevron" /></span>
         </Link>
-        <button className="button" style={{ background: "#999" }} onClick={() => signOut(auth)}>
-          Log out
-        </button>
       </div>
     </main>
   );

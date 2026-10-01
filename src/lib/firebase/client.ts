@@ -5,23 +5,18 @@ import { getStorage, connectStorageEmulator } from "firebase/storage";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 
 const isBrowser = typeof window !== "undefined";
-const firebaseConfig = isBrowser
-  ? {
-      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-      appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-    }
-  : {
-      apiKey: "build-placeholder",
-      authDomain: "build-placeholder.firebaseapp.com",
-      projectId: "build-placeholder",
-      storageBucket: "build-placeholder.appspot.com",
-      messagingSenderId: "build-placeholder",
-      appId: "build-placeholder",
-    };
+
+// Client Firebase config is public, but the module is also evaluated while
+// Next.js prerenders client components. Keep server prerendering from trying
+// to initialize Auth with missing browser-only environment variables.
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? (isBrowser ? "" : "server-prerender-placeholder"),
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "server-prerender.invalid",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "server-prerender",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? "server-prerender.invalid",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? "server-prerender",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? "server-prerender-placeholder",
+};
 
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);

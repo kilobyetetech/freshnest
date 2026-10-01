@@ -11,7 +11,7 @@ import {
 import { auth } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { portalPathForRole } from "@/lib/auth/portalPathForRole";
-import type { Role } from "@/types/models";
+import { Brand } from "@/components/Brand";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -35,17 +35,17 @@ export default function RegisterPage() {
     });
   }
 
-  async function waitForRoleClaim(maxAttempts = 8, delayMs = 500): Promise<Role | null> {
+  async function waitForRoleClaim(maxAttempts = 8, delayMs = 500) {
     for (let i = 0; i < maxAttempts; i++) {
       await refreshClaims();
       const token = await auth.currentUser?.getIdTokenResult();
       const role = token?.claims.role;
-      if (role === "admin" || role === "finance" || role === "staff" || role === "rider" || role === "customer") {
+      if (role === "customer" || role === "admin" || role === "staff" || role === "rider" || role === "finance") {
         return role;
       }
       await new Promise((res) => setTimeout(res, delayMs));
     }
-    return null;
+    throw new Error("Your account is still being set up. Please try signing in again.");
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -86,23 +86,15 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="page">
+    <main className="auth-wrap">
+      <Brand variant="full" />
       <h1>Create your account</h1>
       {error && <p className="error">{error}</p>}
 
-      <button
-        type="button"
-        className="button"
-        style={{ background: "#fff", color: "#1a1a1a", border: "1px solid #ccc", marginBottom: 16 }}
-        onClick={handleGoogleSignUp}
-        disabled={busy}
-      >
+      <button type="button" className="button secondary" onClick={handleGoogleSignUp} disabled={busy}>
         Continue with Google
       </button>
-
-      <div style={{ textAlign: "center", color: "#999", fontSize: 13, marginBottom: 16 }}>
-        or use email
-      </div>
+      <div className="divider">or use email</div>
 
       <form onSubmit={handleSubmit}>
         <input
@@ -131,9 +123,13 @@ export default function RegisterPage() {
           required
         />
         <button className="button" type="submit" disabled={busy}>
-          {busy ? "Creating account..." : "Register"}
+          {busy ? "Creating account…" : "Register"}
         </button>
       </form>
+
+      <p className="muted" style={{ marginTop: 20, textAlign: "center" }}>
+        Already have an account? <a href="/login">Log in</a>
+      </p>
     </main>
   );
 }

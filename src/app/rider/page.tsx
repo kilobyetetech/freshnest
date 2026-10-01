@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { listMyPickupJobs } from "@/lib/firestore/orders";
 import { updateJobStatus } from "@/lib/firestore/jobs";
+import { Icon } from "@/components/Icon";
+import { StatusBadge } from "@/components/StatusBadge";
 import type { JobStatus } from "@/types/models";
 
 const NEXT_STATUS: Partial<Record<JobStatus, JobStatus>> = {
@@ -52,36 +52,37 @@ export default function RiderDashboard() {
     <main className="page">
       <h1>My pickups</h1>
 
-      {activeJobs.length === 0 && (
-        <p style={{ color: "#666", fontSize: 14 }}>No active jobs right now.</p>
-      )}
-
-      {activeJobs.map((j) => (
-        <div className="card" key={j.id}>
-          <strong>{j.customerName as string}</strong>
-          <p style={{ margin: "4px 0", fontSize: 14, color: "#444" }}>
-            {j.address as string}
-          </p>
-          {j.customerPhone ? (
-            <p style={{ fontSize: 13, color: "#666" }}>Phone: {j.customerPhone as string}</p>
-          ) : null}
-          <p style={{ fontSize: 13, color: "#1a7f4e", fontWeight: 600 }}>{j.jobStatus as string}</p>
-          {NEXT_STATUS[j.jobStatus as JobStatus] && (
-            <button
-              className="button"
-              style={{ fontSize: 13, padding: 10 }}
-              disabled={busyId === j.id}
-              onClick={() => advance(j.id, j.jobStatus as JobStatus)}
-            >
-              {busyId === j.id ? "Updating…" : `Mark as ${NEXT_STATUS[j.jobStatus as JobStatus]}`}
-            </button>
-          )}
+      {activeJobs.length === 0 ? (
+        <div className="empty">
+          <strong>Nothing assigned right now</strong>
+          New pickups will show up here as soon as they come in.
         </div>
-      ))}
-
-      <button className="button" style={{ background: "#999", marginTop: 16 }} onClick={() => signOut(auth)}>
-        Log out
-      </button>
+      ) : (
+        activeJobs.map((j) => (
+          <div className="card" key={j.id}>
+            <div className="row-between" style={{ marginBottom: 6 }}>
+              <strong>{j.customerName as string}</strong>
+              <StatusBadge status={j.jobStatus as string} />
+            </div>
+            <p className="muted" style={{ display: "flex", alignItems: "center", gap: 6, margin: "4px 0" }}>
+              <Icon name="pin" size={16} /> {j.address as string}
+            </p>
+            {j.customerPhone ? (
+              <p className="muted" style={{ fontSize: "0.85rem" }}>Phone: {j.customerPhone as string}</p>
+            ) : null}
+            {NEXT_STATUS[j.jobStatus as JobStatus] && (
+              <button
+                className="button"
+                style={{ marginTop: 10 }}
+                disabled={busyId === j.id}
+                onClick={() => advance(j.id, j.jobStatus as JobStatus)}
+              >
+                {busyId === j.id ? "Updating…" : `Mark as ${NEXT_STATUS[j.jobStatus as JobStatus]}`}
+              </button>
+            )}
+          </div>
+        ))
+      )}
     </main>
   );
 }
