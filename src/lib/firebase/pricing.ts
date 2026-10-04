@@ -18,7 +18,8 @@ export async function computePricingSnapshot(
   db: Firestore,
   items: OrderItemInput[],
   serviceAreaId: string,
-  promotionCode?: string
+  promotionCode?: string,
+  customerId?: string
 ): Promise<PricingSnapshot> {
   if (!items.length) {
     throw new Error("At least one item is required.");
@@ -86,31 +87,42 @@ export async function computePricingSnapshot(
   let discount = 0;
   let appliedPromotionCode: string | null = null;
   if (promotionCode) {
-    const promoQuery = await db
-      .collection("promotions")
-      .where("code", "==", promotionCode)
-      .limit(1)
-      .get();
-    if (promoQuery.empty) {
-      throw new Error("Invalid promotion code.");
-    }
-    const promoDoc = promoQuery.docs[0];
-    const promo = promoDoc.data();
+    const normalizedCode = promotionCode.trim().toUpperCase();
+    const promoQuery = await db.collection("promotions").where("code", "==", normalizedCode).limit(1).get();
+    if (promoQuery.empty) throw new Error("Invalid promotion code.");
+    const promo = promoQuery.docs[0].data();
     const now = Date.now();
-    const startsOk = !promo.startDate || new Date(promo.startDate).getTime() <= now;
-    const endsOk = !promo.endDate || new Date(promo.endDate).getTime() >= now;
-    const usageOk = !promo.usageLimit || (promo.usageCount ?? 0) < promo.usageLimit;
-    if (!startsOk || !endsOk || !usageOk) {
+    const toMillis = (value: unknown) => {
+      if (!value) return null;
+      if (typeof value === "object" && value !== null && "toMillis" in value) return (value as { toMillis: () => number }).toMillis();
+      const parsed = new Date(String(value)).getTime();
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+    const startsAt = toMillis(promo.startsAt ?? promo.startDate);
+    const expiresAt = toMillis(promo.expiresAt ?? promo.endDate);
+    if (promo.active !== true || (startsAt !== null && startsAt > now) || (expiresAt !== null && expiresAt < now)) {
       throw new Error("This promotion code is no longer valid.");
     }
-    discount =
-      promo.discountType === "percent"
-        ? Math.round(subtotal * (promo.discountValue / 100))
-        : promo.discountValue;
-    appliedPromotionCode = promotionCode;
-    // Usage count increment happens transactionally in the caller
-    // (createOrder), alongside the order write, not here -- this
-    // function only computes numbers, it does not write anything.
+    if (typeof promo.minimumOrderAmount === "number" && subtotal < promo.minimumOrderAmount) {
+      throw new Error(`This promotion requires a minimum order of ${promo.minimumOrderAmount}.`);
+    }
+    if (Array.isArray(promo.serviceIds) && promo.serviceIds.length && !snapshotItems.some((item) => promo.serviceIds.includes(item.serviceId))) {
+      throw new Error("This promotion does not apply to the selected services.");
+    }
+    if (Array.isArray(promo.serviceAreaIds) && promo.serviceAreaIds.length && !promo.serviceAreaIds.includes(serviceAreaId)) {
+      throw new Error("This promotion is not available in your service area.");
+    }
+    if (promo.customerEligibility === "first_order" && customerId) {
+      const priorOrders = await db.collection("orders").where("customerId", "==", customerId).limit(1).get();
+      if (!priorOrders.empty) throw new Error("This promotion is only available on your first order.");
+    }
+    if (promo.usageLimit && (promo.usageCount ?? 0) >= promo.usageLimit) throw new Error("This promotion has reached its usage limit.");
+    discount = promo.type === "fixed" || promo.discountType === "fixed"
+      ? Number(promo.value ?? promo.discountValue ?? 0)
+      : Math.round(subtotal * Number(promo.value ?? promo.discountValue ?? 0) / 100);
+    if (typeof promo.maximumDiscount === "number") discount = Math.min(discount, promo.maximumDiscount);
+    discount = Math.min(Math.max(0, discount), subtotal + area.pickupFee + area.deliveryFee);
+    appliedPromotionCode = normalizedCode;
   }
 
   const total = Math.max(0, subtotal + area.pickupFee + area.deliveryFee - discount);

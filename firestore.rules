@@ -110,6 +110,16 @@ service cloud.firestore {
     // falls through to the default-deny catch-all above.
     // =====================================================================
 
+    // ---------- Phase 5 growth controls ----------
+    match /promotions/{promotionId} {
+      allow read: if isSignedIn() && (isAdmin() || resource.data.active == true);
+      allow write: if isAdmin();
+    }
+    match /promotionRedemptions/{redemptionId} {
+      allow read: if isSignedIn() && (resource.data.customerId == request.auth.uid || isAdmin() || isFinance());
+      allow write: if false;
+    }
+
     // ---------- services/{serviceId} ----------
     // Live pricing source of truth. Public read of active services only;
     // all writes are Admin-only, direct (small, low-risk writes — no

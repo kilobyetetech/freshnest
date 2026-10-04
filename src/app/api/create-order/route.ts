@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
 
   let pricingSnapshot;
   try {
-    pricingSnapshot = await computePricingSnapshot(db, body.items, serviceAreaId, body.promotionCode);
+    pricingSnapshot = await computePricingSnapshot(db, body.items, serviceAreaId, body.promotionCode, caller.uid);
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not price this order." },
@@ -62,13 +62,17 @@ export async function POST(req: NextRequest) {
   const orderRef = db.collection("orders").doc();
 
   await db.runTransaction(async (tx) => {
-    if (body.promotionCode) {
-      const promoQuery = await tx.get(
-        db.collection("promotions").where("code", "==", body.promotionCode).limit(1)
-      );
-      if (!promoQuery.empty) {
-        tx.update(promoQuery.docs[0].ref, { usageCount: FieldValue.increment(1) });
-      }
+    if (pricingSnapshot.promotionCode) {
+      const promoQuery = await tx.get(db.collection("promotions").where("code", "==", pricingSnapshot.promotionCode).limit(1));
+      if (promoQuery.empty) throw new Error("Promotion is no longer available.");
+      const promoRef = promoQuery.docs[0].ref;
+      const promo = promoQuery.docs[0].data();
+      const redemptionRef = db.collection("promotionRedemptions").doc(`${promoRef.id}_${caller.uid}_${orderRef.id}`);
+      const redemptionSnap = await tx.get(redemptionRef);
+      if (redemptionSnap.exists) throw new Error("This promotion has already been redeemed for this order.");
+      if (promo.usageLimit && (promo.usageCount ?? 0) >= promo.usageLimit) throw new Error("This promotion has reached its usage limit.");
+      tx.update(promoRef, { usageCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
+      tx.set(redemptionRef, { promotionId: promoRef.id, code: pricingSnapshot.promotionCode, customerId: caller.uid, orderId: orderRef.id, createdAt: FieldValue.serverTimestamp() });
     }
 
     tx.set(orderRef, {
