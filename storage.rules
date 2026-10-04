@@ -42,26 +42,22 @@ service firebase.storage {
       allow update, delete: if false; // receipts are append-only evidence
     }
 
-    // /proofOfDelivery/{orderId}/{fileName}
-    // Intended Phase 3 rule (once `orders`/`deliveryJobs` exist):
-    //   allow read: if isSignedIn() && (
-    //     firestore.get(/databases/(default)/documents/orders/$(orderId)).data.customerId == request.auth.uid
-    //     || firestore.get(/databases/(default)/documents/deliveryJobs/$(orderId + '_delivery')).data.riderId == request.auth.uid
-    //     || isAdmin());
-    //   allow create: if isSignedIn() && firestore.get(...).data.riderId == request.auth.uid;
-    // Left fully deny-all until that collection exists.
+    // Phase 3 evidence files are scoped through Firestore ownership checks.
     match /proofOfDelivery/{orderId}/{fileName} {
-      allow read, write: if false;
+      allow read: if isSignedIn() && (firestore.get(/databases/(default)/documents/orders/$(orderId)).data.customerId == request.auth.uid || isAdmin() || (hasRole('rider') && firestore.get(/databases/(default)/documents/deliveryJobs/$(orderId)).data.assignedRiderId == request.auth.uid));
+      allow create: if hasRole('rider') && firestore.get(/databases/(default)/documents/deliveryJobs/$(orderId)).data.assignedRiderId == request.auth.uid;
+      allow update, delete: if false;
     }
 
-    // /signatures/{orderId}/{fileName} — same deferred pattern as above.
     match /signatures/{orderId}/{fileName} {
-      allow read, write: if false;
+      allow read: if isSignedIn() && (firestore.get(/databases/(default)/documents/orders/$(orderId)).data.customerId == request.auth.uid || isAdmin() || (hasRole('rider') && firestore.get(/databases/(default)/documents/deliveryJobs/$(orderId)).data.assignedRiderId == request.auth.uid));
+      allow create: if hasRole('rider') && firestore.get(/databases/(default)/documents/deliveryJobs/$(orderId)).data.assignedRiderId == request.auth.uid;
+      allow update, delete: if false;
     }
 
-    // /incidentPhotos/{incidentId}/{fileName} — deferred to Phase 3.
     match /incidentPhotos/{incidentId}/{fileName} {
-      allow read, write: if false;
+      allow read, create: if isAdmin() || hasRole('staff') || (isSignedIn() && firestore.get(/databases/(default)/documents/incidents/$(incidentId)).data.reportedByUid == request.auth.uid);
+      allow update, delete: if false;
     }
 
     // /expenseReceipts/{expenseId}/{fileName} — deferred to Phase 4, but
