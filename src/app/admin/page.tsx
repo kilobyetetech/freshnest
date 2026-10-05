@@ -42,6 +42,14 @@ export default function AdminDashboard() {
           </span>
           <span className="chevron"><Icon name="chevron" /></span>
         </Link>
+        <Link href="/admin/promotions" className="list-row">
+          <span className="list-icon"><Icon name="tag" /></span>
+          <span className="list-text">
+            <span className="list-title">Promotions</span>
+            <span className="list-sub">Create and manage customer offers</span>
+          </span>
+          <span className="chevron"><Icon name="chevron" /></span>
+        </Link>
       </div>
 
       <div className="section-title">People</div>
