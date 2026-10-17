@@ -111,6 +111,8 @@ export type PaymentStatus = "Unpaid" | "PendingVerification" | "Confirmed" | "Re
 export type RefundStatus = "None" | "Requested" | "UnderReview" | "Approved" | "PendingPayment" | "Paid" | "Rejected";
 
 export interface OrderDoc {
+  /** Permanent server-generated payment/order reference. */
+  orderNumber: string;
   customerId: string;
   customerName: string;
   customerPhone: string | null;

@@ -60,8 +60,21 @@ export async function POST(req: NextRequest) {
   const user = userSnap.data();
 
   const orderRef = db.collection("orders").doc();
+  const orderNumberCounterRef = db.collection("system").doc("orderNumberCounter");
+  const orderYear = new Date().getUTCFullYear();
+  let orderNumber = "";
 
   await db.runTransaction(async (tx) => {
+    const counterSnap = await tx.get(orderNumberCounterRef);
+    const nextSequence = (counterSnap.data()?.nextSequence ?? 1) as number;
+    if (!Number.isSafeInteger(nextSequence) || nextSequence < 1) {
+      throw new Error("Order number counter is invalid.");
+    }
+    orderNumber = `FN-${orderYear}-${String(nextSequence).padStart(6, "0")}`;
+    tx.set(orderNumberCounterRef, {
+      nextSequence: nextSequence + 1,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
     if (pricingSnapshot.promotionCode) {
       const promoQuery = await tx.get(db.collection("promotions").where("code", "==", pricingSnapshot.promotionCode).limit(1));
       if (promoQuery.empty) throw new Error("Promotion is no longer available.");
@@ -76,6 +89,7 @@ export async function POST(req: NextRequest) {
     }
 
     tx.set(orderRef, {
+      orderNumber,
       customerId: caller.uid,
       customerName: user?.displayName ?? "",
       customerPhone: user?.phone ?? null,
