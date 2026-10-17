@@ -19,8 +19,8 @@ export async function POST(req: NextRequest) {
   const orderId: string | undefined = body?.orderId;
   const transactionReference: string | undefined = body?.transactionReference;
 
-  if (!orderId || !transactionReference) {
-    return NextResponse.json({ error: "orderId and transactionReference are required." }, { status: 400 });
+  if (!orderId || !transactionReference || typeof transactionReference !== "string" || transactionReference.trim().length > 160) {
+    return NextResponse.json({ error: "orderId and a valid transactionReference are required." }, { status: 400 });
   }
 
   const db = adminDb();
