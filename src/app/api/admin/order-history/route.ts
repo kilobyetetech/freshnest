@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { verifyCaller } from "@/lib/firebase/verifyCaller";
+import { formatOrderNumber, nextAvailableSequence } from "@/lib/firestore/orderBackfill";
 
 const allowed = new Set(["admin", "finance"]);
 
@@ -37,16 +38,18 @@ export async function POST(req: NextRequest) {
 
   let updated = 0;
   const year = new Date().getUTCFullYear();
+  const existingOrderNumbers = snap.docs.map((doc) => doc.data().orderNumber);
   for (const chunk of Array.from({ length: Math.ceil(missing.length / 400) }, (_, i) => missing.slice(i * 400, i * 400 + 400))) {
     const changed = await db.runTransaction(async (tx) => {
       const counter = db.collection("system").doc("orderNumberCounter");
       const counterSnap = await tx.get(counter);
       const orderSnapshots = await Promise.all(chunk.map((order) => tx.get(order.ref)));
-      let next = (counterSnap.data()?.next as number | undefined) ?? 1;
+      let next = nextAvailableSequence(existingOrderNumbers, counterSnap.data()?.next, year);
       let count = 0;
       orderSnapshots.forEach((orderSnapshot, index) => {
         if (orderSnapshot.data()?.orderNumber) return;
-        tx.update(chunk[index].ref, { orderNumber: `FN-${year}-${String(next).padStart(6, "0")}` });
+        tx.update(chunk[index].ref, { orderNumber: formatOrderNumber(year, next) });
+        existingOrderNumbers.push(formatOrderNumber(year, next));
         next += 1;
         count += 1;
       });
