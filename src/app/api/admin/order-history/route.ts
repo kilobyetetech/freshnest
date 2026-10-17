@@ -10,15 +10,19 @@ export async function GET(req: NextRequest) {
   if (!caller || !allowed.has(caller.role ?? "")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const url = new URL(req.url);
   const search = url.searchParams.get("q")?.trim().toLowerCase() ?? "";
-  const pageSize = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 50), 1), 100);
+  const requestedLimit = Number(url.searchParams.get("limit") ?? 50);
+  const pageSize = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.floor(requestedLimit), 1), 100) : 50;
   const db = adminDb();
-  const snap = await db.collection("orders").orderBy("createdAt", "desc").limit(pageSize).get();
-  const orders = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Record<string, unknown> & { id: string })).filter((order) => {
+  // Search must cover the complete historical collection. Firestore cannot perform
+  // a contains query across these fields, so a bounded server-side scan is used.
+  const snap = await db.collection("orders").orderBy("createdAt", "desc").limit(5000).get();
+  const matches = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Record<string, unknown> & { id: string })).filter((order) => {
     if (!search) return true;
-    const value = [order.orderNumber, order.customerName, order.customerId, order.paymentId].join(" ").toLowerCase();
+    const value = [order.orderNumber, order.customerName, order.customerId, order.paymentId, order.paymentReference].join(" ").toLowerCase();
     return value.includes(search);
   });
-  return NextResponse.json({ orders, hasMore: snap.size === pageSize, nextCursor: snap.size ? snap.docs[snap.docs.length - 1].id : null });
+  const orders = matches.slice(0, pageSize);
+  return NextResponse.json({ orders, hasMore: matches.length > pageSize, nextCursor: orders.length ? orders[orders.length - 1].id : null, scanned: snap.size });
 }
 
 export async function POST(req: NextRequest) {
@@ -34,17 +38,22 @@ export async function POST(req: NextRequest) {
   let updated = 0;
   const year = new Date().getUTCFullYear();
   for (const chunk of Array.from({ length: Math.ceil(missing.length / 400) }, (_, i) => missing.slice(i * 400, i * 400 + 400))) {
-    await db.runTransaction(async (tx) => {
+    const changed = await db.runTransaction(async (tx) => {
       const counter = db.collection("system").doc("orderNumberCounter");
       const counterSnap = await tx.get(counter);
+      const orderSnapshots = await Promise.all(chunk.map((order) => tx.get(order.ref)));
       let next = (counterSnap.data()?.next as number | undefined) ?? 1;
-      for (const order of chunk) {
-        tx.update(order.ref, { orderNumber: `FN-${year}-${String(next).padStart(6, "0")}` });
+      let count = 0;
+      orderSnapshots.forEach((orderSnapshot, index) => {
+        if (orderSnapshot.data()?.orderNumber) return;
+        tx.update(chunk[index].ref, { orderNumber: `FN-${year}-${String(next).padStart(6, "0")}` });
         next += 1;
-        updated += 1;
-      }
-      tx.set(counter, { next, updatedAt: Timestamp.now() }, { merge: true });
+        count += 1;
+      });
+      if (count) tx.set(counter, { next, updatedAt: Timestamp.now() }, { merge: true });
+      return count;
     });
+    updated += changed;
   }
   return NextResponse.json({ dryRun: false, examined: snap.size, missing: missing.length, updated });
 }
