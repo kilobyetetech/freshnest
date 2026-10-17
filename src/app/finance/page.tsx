@@ -58,6 +58,8 @@ export default function FinanceDashboard() {
         </div>
       </div>
 
+      <div className="actions" style={{ marginBottom: 24 }}><a className="button secondary" href="/finance/order-history">Search order history</a></div>
+
       <div className="section-title">Payments awaiting verification</div>
       {error && <p className="error">{error}</p>}
 

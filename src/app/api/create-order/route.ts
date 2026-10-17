@@ -29,6 +29,11 @@ export async function POST(req: NextRequest) {
   }
 
   const db = adminDb();
+  const idempotencyKey = req.headers.get("Idempotency-Key")?.trim();
+  if (!idempotencyKey || idempotencyKey.length > 128) {
+    return NextResponse.json({ error: "A valid Idempotency-Key header is required." }, { status: 400 });
+  }
+  const idempotencyRef = db.collection("orderIdempotency").doc(`${caller.uid}_${idempotencyKey.replace(/[^A-Za-z0-9_-]/g, "_")}`);
 
   const addressSnap = await db.collection("addresses").doc(body.addressId).get();
   if (!addressSnap.exists) {
@@ -63,8 +68,14 @@ export async function POST(req: NextRequest) {
   const orderNumberCounterRef = db.collection("system").doc("orderNumberCounter");
   const orderYear = new Date().getUTCFullYear();
   let orderNumber = "";
+  let existingOrderId: string | null = null;
 
   await db.runTransaction(async (tx) => {
+    const idempotencySnap = await tx.get(idempotencyRef);
+    if (idempotencySnap.exists) {
+      existingOrderId = idempotencySnap.data()?.orderId ?? null;
+      return;
+    }
     const counterSnap = await tx.get(orderNumberCounterRef);
     const nextSequence = (counterSnap.data()?.nextSequence ?? 1) as number;
     if (!Number.isSafeInteger(nextSequence) || nextSequence < 1) {
@@ -115,7 +126,16 @@ export async function POST(req: NextRequest) {
       note: "Order created",
       timestamp: FieldValue.serverTimestamp(),
     });
+    tx.create(idempotencyRef, {
+      customerId: caller.uid,
+      orderId: orderRef.id,
+      createdAt: FieldValue.serverTimestamp(),
+    });
   });
+
+  if (existingOrderId) {
+    return NextResponse.json({ orderId: existingOrderId, idempotentReplay: true });
+  }
 
   await logAudit(db, {
     actorId: caller.uid,

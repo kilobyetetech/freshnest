@@ -52,6 +52,15 @@ export default function AdminDashboard() {
         </Link>
       </div>
 
+      <div className="section-title">Orders & records</div>
+      <div className="list-group">
+        <Link href="/admin/order-history" className="list-row">
+          <span className="list-icon"><Icon name="receipt" /></span>
+          <span className="list-text"><span className="list-title">Order history</span><span className="list-sub">Search all orders and backfill missing Order IDs</span></span>
+          <span className="chevron"><Icon name="chevron" /></span>
+        </Link>
+      </div>
+
       <div className="section-title">People</div>
       <div className="list-group">
         <Link href="/admin/staff" className="list-row">

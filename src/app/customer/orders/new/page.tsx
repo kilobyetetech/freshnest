@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { listActiveServices } from "@/lib/firestore/catalog";
@@ -23,6 +23,7 @@ export default function NewOrderPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -55,9 +56,10 @@ export default function NewOrderPage() {
     setBusy(true);
     try {
       const idToken = await auth.currentUser?.getIdToken();
+      requestKeyRef.current ??= crypto.randomUUID();
       const res = await fetch("/api/create-order", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}`, "Idempotency-Key": requestKeyRef.current },
         body: JSON.stringify({ items, addressId, promotionCode: promotionCode || undefined }),
       });
       const data = await res.json();
