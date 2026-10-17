@@ -42,8 +42,8 @@ export default function CustomerOrdersPage() {
             <Link key={o.id} href={`/customer/orders/${o.id}`} className="list-row">
               <span className="list-icon"><Icon name="bag" /></span>
               <span className="list-text">
-                <span className="list-title">₦{o.pricingSnapshot?.total ?? 0}</span>
-                <span className="list-sub">Payment: {o.paymentStatus}</span>
+                <span className="list-title">{o.orderNumber || `Order ${o.id.slice(0, 8)}`}</span>
+                <span className="list-sub">₦{o.pricingSnapshot?.total ?? 0} · Payment: {o.paymentStatus}</span>
               </span>
               <StatusBadge status={o.orderStatus} />
             </Link>

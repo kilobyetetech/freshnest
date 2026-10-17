@@ -64,7 +64,10 @@ export default function OrderDetailPage() {
 
   return (
     <main className="page">
-      <h1>Order</h1>
+      <h1>{order.orderNumber || `Order ${order.id.slice(0, 8)}`}</h1>
+      <p className="muted" style={{ marginTop: -12, marginBottom: 16 }}>
+        Include this Order ID in your transfer narration. It is separate from your submitted payment reference.
+      </p>
 
       <div className="card">
         <div className="row-between" style={{ marginBottom: 6 }}>
