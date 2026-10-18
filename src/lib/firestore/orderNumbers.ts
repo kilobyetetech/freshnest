@@ -21,9 +21,17 @@ export async function allocateOrderNumber(tx: Transaction, db: Firestore, year: 
   const counterSnap = await tx.get(counterRef);
   const raw = counterSnap.data()?.nextSequence;
   const next = typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? raw : 1;
-  const orderNumber = formatOrderNumber(year, next);
-  tx.set(counterRef, { nextSequence: next + 1, updatedAt: Timestamp.now() }, { merge: true });
-  return orderNumber;
+  let sequence = next;
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    const candidate = formatOrderNumber(year, sequence);
+    const owners = await tx.get(db.collection("orders").where("orderNumber", "==", candidate).limit(1));
+    if (owners.empty) {
+      tx.set(counterRef, { nextSequence: sequence + 1, updatedAt: Timestamp.now() }, { merge: true });
+      return candidate;
+    }
+    sequence += 1;
+  }
+  throw new Error("Unable to allocate a unique Order ID.");
 }
 
 export function nextAvailableSequence(orderNumbers: readonly unknown[], counterNext: unknown, year: number) {

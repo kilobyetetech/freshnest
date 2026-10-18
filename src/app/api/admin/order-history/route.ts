@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { verifyCaller } from "@/lib/firebase/verifyCaller";
-import { allocateOrderNumber, formatOrderNumber, nextAvailableSequence, parseOrderNumber } from "@/lib/firestore/orderNumbers";
+import { allocateOrderNumber, parseOrderNumber } from "@/lib/firestore/orderNumbers";
 
 const allowed = new Set(["admin", "finance"]);
 const projection = (role: string, id: string, order: Record<string, any>, payments: Record<string, any>[]) => ({
@@ -32,9 +32,24 @@ export async function GET(req: NextRequest) {
   const cursor = decodeCursor(url.searchParams.get("cursor")); if (url.searchParams.get("cursor") && !cursor) return NextResponse.json({ error: "Invalid cursor." }, { status: 400 });
   const db = adminDb(); let query: any = db.collection("orders").orderBy("createdAt", "desc").orderBy("__name__", "desc").limit(limit + 1);
   if (cursor) query = query.startAfter(Timestamp.fromMillis(cursor.ms), cursor.id);
-  const snap = await query.get(); const docs = snap.docs; const hasMore = docs.length > limit; const pageDocs = docs.slice(0, limit);
-  const matched = q ? pageDocs.filter((doc: any) => { const o = doc.data(); return [o.orderNumber, o.customerName, o.customerId, o.paymentId].some((v) => String(v ?? "").toLowerCase().includes(q)); }) : pageDocs;
-  const orders = await Promise.all(matched.map(async (doc: any) => {
+  let pageDocs: any[];
+  let hasMore = false;
+  if (q) {
+    const [orderNumberSnap, customerSnap, paymentIdSnap, paymentRefSnap] = await Promise.all([
+      db.collection("orders").where("orderNumber", "==", q.toUpperCase()).limit(100).get(),
+      db.collection("orders").where("customerId", "==", q).limit(100).get(),
+      db.collection("orders").where("paymentId", "==", q).limit(100).get(),
+      db.collection("payments").where("transactionReference", "==", q).limit(100).get(),
+    ]);
+    const ids = new Set([...orderNumberSnap.docs, ...customerSnap.docs, ...paymentIdSnap.docs].map((d) => d.id));
+    const paymentOrderIds = paymentRefSnap.docs.map((d) => d.data().orderId).filter(Boolean);
+    const paymentOrders = await Promise.all(paymentOrderIds.map((id) => db.collection("orders").doc(id).get()));
+    for (const doc of paymentOrders) if (doc.exists) ids.add(doc.id);
+    pageDocs = [...ids].map((id) => [...orderNumberSnap.docs, ...customerSnap.docs, ...paymentIdSnap.docs, ...paymentOrders].find((d) => d.id === id)).filter(Boolean).slice(0, limit);
+  } else {
+    const snap = await query.get(); const docs = snap.docs; hasMore = docs.length > limit; pageDocs = docs.slice(0, limit);
+  }
+  const orders = await Promise.all(pageDocs.map(async (doc: any) => {
     const o = doc.data(); const paymentSnap = caller.role === "finance" ? await db.collection("payments").where("orderId", "==", doc.id).limit(20).get() : null;
     return projection(caller.role!, doc.id, o, paymentSnap?.docs.map((p: any) => ({ id: p.id, ...p.data() })) ?? []);
   }));
@@ -44,17 +59,24 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const caller = await verifyCaller(req); if (!caller || caller.role !== "admin") return NextResponse.json({ error: "Only Admin may run backfill." }, { status: 403 });
   const body = await req.json().catch(() => ({})); const dryRun = body?.dryRun !== false; const db = adminDb(); const snap = await db.collection("orders").get();
+  const seen = new Map<string, string>(); let collisions = 0; let manualReview = 0;
+  for (const doc of snap.docs) {
+    const raw = doc.data().orderNumber; const parsed = parseOrderNumber(raw);
+    if (raw && !parsed) manualReview++;
+    if (parsed) {
+      const owner = seen.get(String(raw));
+      if (owner && owner !== doc.id) { collisions++; manualReview++; } else seen.set(String(raw), doc.id);
+    }
+  }
   const missing = snap.docs.filter((d) => !parseOrderNumber(d.data().orderNumber));
-  if (dryRun) return NextResponse.json({ dryRun: true, examined: snap.size, missing: missing.length, updated: 0, collisions: 0, manualReview: 0 });
-  let updated = 0; let collisions = 0; let manualReview = 0;
+  if (dryRun) return NextResponse.json({ dryRun: true, examined: snap.size, missing: missing.length, skipped: snap.size - missing.length, updated: 0, collisions, manualReview });
+  let updated = 0;
   for (let i = 0; i < missing.length; i += 400) {
     const chunk = missing.slice(i, i + 400);
     updated += await db.runTransaction(async (tx) => {
       let count = 0; const year = new Date().getUTCFullYear();
-      const counterRef = db.doc("system/orderNumberCounter"); const counterSnap = await tx.get(counterRef); const existing = snap.docs.map((d) => d.data().orderNumber);
-      const next = nextAvailableSequence(existing, counterSnap.data()?.nextSequence, year); let sequence = next;
-      for (const doc of chunk) { const fresh = await tx.get(doc.ref); if (parseOrderNumber(fresh.data()?.orderNumber)) continue; const number = formatOrderNumber(year, sequence++); tx.update(doc.ref, { orderNumber: number }); count++; }
-      if (count) tx.set(counterRef, { nextSequence: sequence, updatedAt: Timestamp.now() }, { merge: true }); return count;
+      for (const doc of chunk) { const fresh = await tx.get(doc.ref); if (parseOrderNumber(fresh.data()?.orderNumber)) continue; const number = await allocateOrderNumber(tx, db, year); tx.update(doc.ref, { orderNumber: number }); count++; }
+      return count;
     });
   }
   return NextResponse.json({ dryRun: false, examined: snap.size, missing: missing.length, updated, collisions, manualReview });

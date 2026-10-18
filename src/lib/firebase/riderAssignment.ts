@@ -37,13 +37,16 @@ export async function assignRiderInTransaction(
   let best: { id: string; data: RiderDoc } | null = null;
   for (const doc of ridersSnap.docs) {
     const data = doc.data() as RiderDoc;
+    const workload = normalizeWorkload(data.currentWorkload);
+    if (workload === null) continue;
+    const normalized = { ...data, currentWorkload: workload } as RiderDoc;
     if (!best) {
-      best = { id: doc.id, data };
+      best = { id: doc.id, data: normalized };
       continue;
     }
-    if (data.currentWorkload < best.data.currentWorkload) {
-      best = { id: doc.id, data };
-    } else if (data.currentWorkload === best.data.currentWorkload) {
+    if (workload < best.data.currentWorkload) {
+      best = { id: doc.id, data: normalized };
+    } else if (workload === best.data.currentWorkload) {
       const bestLast = toMillis(best.data.lastAssignedAt);
       const dataLast = toMillis(data.lastAssignedAt);
       if (dataLast < bestLast) {
@@ -60,6 +63,11 @@ export async function assignRiderInTransaction(
   });
 
   return best.id;
+}
+
+export function normalizeWorkload(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || !Number.isSafeInteger(value)) return null;
+  return value;
 }
 
 function toMillis(value: unknown): number {
