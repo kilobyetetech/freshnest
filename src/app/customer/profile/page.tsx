@@ -45,6 +45,7 @@ export default function ProfilePage() {
   return (
     <main className="page">
       <h1>My profile</h1>
+      {profile?.customerId && <p className="muted">Customer ID: <strong>{profile.customerId}</strong></p>}
       {error && <p className="error">{error}</p>}
       <div className="card">
         <form onSubmit={handleSave}>
