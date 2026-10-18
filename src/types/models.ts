@@ -10,6 +10,7 @@ export interface UserDoc {
 }
 
 export interface CustomerProfileDoc {
+  customerId: string;
   name: string;
   phone: string | null;
   email: string | null;
@@ -114,6 +115,7 @@ export interface OrderDoc {
   /** Permanent server-generated payment/order reference. */
   orderNumber: string;
   customerId: string;
+  customerNumber: string | null;
   customerName: string;
   customerPhone: string | null;
   addressId: string;
@@ -128,6 +130,24 @@ export interface OrderDoc {
   assignedPickupJobId: string | null;
   createdAt: unknown;
   updatedAt: unknown;
+}
+
+export interface OrderItemDoc {
+  itemId: string;
+  customerId: string;
+  customerNumber: string | null;
+  orderId: string;
+  serviceId: string;
+  description: string;
+  quantity: number;
+  unitOfMeasure: "item" | "kg";
+  unitPrice: number;
+  subtotal: number;
+  specialCareInstructions: string | null;
+  processingStage: string;
+  qualityCheck: string | null;
+  incidentIds: string[];
+  createdAt: unknown;
 }
 
 export type PaymentDocStatus = "pending_verification" | "confirmed" | "rejected";

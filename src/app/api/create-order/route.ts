@@ -67,6 +67,8 @@ export async function POST(req: NextRequest) {
 
   const userSnap = await db.collection("users").doc(caller.uid).get();
   const user = userSnap.data();
+  const profileSnap = await db.collection("customerProfiles").doc(caller.uid).get();
+  const customerNumber = profileSnap.data()?.customerId ?? null;
 
   const orderRef = db.collection("orders").doc();
   const orderYear = new Date().getUTCFullYear();
@@ -100,6 +102,7 @@ export async function POST(req: NextRequest) {
     tx.set(orderRef, {
       orderNumber,
       customerId: caller.uid,
+      customerNumber,
       customerName: user?.displayName ?? "",
       customerPhone: user?.phone ?? null,
       addressId: body.addressId,
@@ -115,6 +118,31 @@ export async function POST(req: NextRequest) {
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
+
+    for (const [index, item] of pricingSnapshot.items.entries()) {
+      const itemRef = orderRef.collection("items").doc();
+      tx.set(itemRef, {
+        itemId: itemRef.id,
+        customerId: caller.uid,
+        customerNumber,
+        orderId: orderRef.id,
+        serviceId: item.serviceId,
+        description: item.name,
+        quantity: item.quantity,
+        unitOfMeasure: body.items[index]?.weight ? "kg" : "item",
+        unitPrice: item.unitPrice,
+        subtotal: item.subtotal,
+        specialCareInstructions: null,
+        processingStage: "Pending",
+        qualityCheck: null,
+        incidentIds: [],
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      tx.set(itemRef.collection("statusHistory").doc(), {
+        status: "Pending", actorId: caller.uid, actorRole: "customer",
+        timestamp: FieldValue.serverTimestamp(),
+      });
+    }
 
     tx.set(orderRef.collection("statusHistory").doc(), {
       previousStatus: null,

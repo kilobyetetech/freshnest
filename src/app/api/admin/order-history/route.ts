@@ -6,7 +6,7 @@ import { allocateOrderNumber, parseOrderNumber } from "@/lib/firestore/orderNumb
 
 const allowed = new Set(["admin", "finance"]);
 const projection = (role: string, id: string, order: Record<string, any>, payments: Record<string, any>[]) => ({
-  id, orderNumber: order.orderNumber ?? null, customerId: order.customerId ?? null,
+  id, orderNumber: order.orderNumber ?? null, customerId: order.customerId ?? null, customerNumber: order.customerNumber ?? null,
   customerName: order.customerName ?? null, orderStatus: order.orderStatus ?? null,
   paymentStatus: order.paymentStatus ?? null, refundStatus: order.refundStatus ?? null,
   createdAt: order.createdAt ?? null, updatedAt: order.updatedAt ?? null,
@@ -35,23 +35,33 @@ export async function GET(req: NextRequest) {
   let pageDocs: any[];
   let hasMore = false;
   if (q) {
-    const [orderNumberSnap, customerSnap, paymentIdSnap, paymentRefSnap] = await Promise.all([
-      db.collection("orders").where("orderNumber", "==", q.toUpperCase()).limit(100).get(),
-      db.collection("orders").where("customerId", "==", q).limit(100).get(),
+  const [orderNumberSnap, customerSnap, customerNumberSnap, paymentIdSnap, paymentRefSnap] = await Promise.all([
+  db.collection("orders").where("orderNumber", "==", q.toUpperCase()).limit(100).get(),
+  db.collection("orders").where("customerId", "==", q).limit(100).get(),
+  db.collection("orders").where("customerNumber", "==", q.toUpperCase()).limit(100).get(),
       db.collection("orders").where("paymentId", "==", q).limit(100).get(),
       db.collection("payments").where("transactionReference", "==", q).limit(100).get(),
     ]);
-    const ids = new Set([...orderNumberSnap.docs, ...customerSnap.docs, ...paymentIdSnap.docs].map((d) => d.id));
+    const ids = new Set([...orderNumberSnap.docs, ...customerSnap.docs, ...customerNumberSnap.docs, ...paymentIdSnap.docs].map((d) => d.id));
     const paymentOrderIds = paymentRefSnap.docs.map((d) => d.data().orderId).filter(Boolean);
     const paymentOrders = await Promise.all(paymentOrderIds.map((id) => db.collection("orders").doc(id).get()));
     for (const doc of paymentOrders) if (doc.exists) ids.add(doc.id);
-    pageDocs = [...ids].map((id) => [...orderNumberSnap.docs, ...customerSnap.docs, ...paymentIdSnap.docs, ...paymentOrders].find((d) => d.id === id)).filter(Boolean).slice(0, limit);
+    pageDocs = [...ids].map((id) => [...orderNumberSnap.docs, ...customerSnap.docs, ...customerNumberSnap.docs, ...paymentIdSnap.docs, ...paymentOrders].find((d) => d.id === id)).filter(Boolean).slice(0, limit);
   } else {
     const snap = await query.get(); const docs = snap.docs; hasMore = docs.length > limit; pageDocs = docs.slice(0, limit);
   }
   const orders = await Promise.all(pageDocs.map(async (doc: any) => {
-    const o = doc.data(); const paymentSnap = caller.role === "finance" ? await db.collection("payments").where("orderId", "==", doc.id).limit(20).get() : null;
-    return projection(caller.role!, doc.id, o, paymentSnap?.docs.map((p: any) => ({ id: p.id, ...p.data() })) ?? []);
+    const o = doc.data();
+    const [paymentSnap, itemSnap, historySnap] = await Promise.all([
+      caller.role === "finance" ? db.collection("payments").where("orderId", "==", doc.id).limit(20).get() : null,
+      db.collection("orders").doc(doc.id).collection("items").limit(200).get(),
+      db.collection("orders").doc(doc.id).collection("statusHistory").orderBy("timestamp", "asc").limit(200).get(),
+    ]);
+    const result = projection(caller.role!, doc.id, o, paymentSnap?.docs.map((p: any) => ({ id: p.id, ...p.data() })) ?? []);
+    return { ...result, customerNumber: o.customerNumber ?? null, pricingSnapshot: o.pricingSnapshot ?? null,
+      addressSnapshot: caller.role === "admin" ? o.addressSnapshot ?? null : undefined,
+      items: itemSnap.docs.map((item: any) => ({ id: item.id, ...item.data() })),
+      statusHistory: historySnap.docs.map((event: any) => ({ id: event.id, ...event.data() })) };
   }));
   return NextResponse.json({ orders, hasMore, nextCursor: hasMore && pageDocs.length ? encodeCursor({ ...pageDocs[pageDocs.length - 1].data(), id: pageDocs[pageDocs.length - 1].id }) : null });
 }
