@@ -4,6 +4,8 @@ import { verifyCaller } from "@/lib/firebase/verifyCaller";
 import { computePricingSnapshot, OrderItemInput } from "@/lib/firebase/pricing";
 import { logAudit } from "@/lib/firebase/auditServer";
 import { FieldValue } from "firebase-admin/firestore";
+import { createHash } from "node:crypto";
+import { allocateOrderNumber } from "@/lib/firestore/orderNumbers";
 
 interface CreateOrderBody {
   items: OrderItemInput[];
@@ -33,7 +35,9 @@ export async function POST(req: NextRequest) {
   if (!idempotencyKey || idempotencyKey.length > 128) {
     return NextResponse.json({ error: "A valid Idempotency-Key header is required." }, { status: 400 });
   }
-  const idempotencyRef = db.collection("orderIdempotency").doc(`${caller.uid}_${idempotencyKey.replace(/[^A-Za-z0-9_-]/g, "_")}`);
+  const idempotencyDigest = createHash("sha256").update(idempotencyKey, "utf8").digest("hex");
+  const requestFingerprint = createHash("sha256").update(JSON.stringify({ items: body.items, addressId: body.addressId, promotionCode: body.promotionCode ?? null }), "utf8").digest("hex");
+  const idempotencyRef = db.collection("orderIdempotency").doc(`${caller.uid}_${idempotencyDigest}`);
 
   const addressSnap = await db.collection("addresses").doc(body.addressId).get();
   if (!addressSnap.exists) {
@@ -65,7 +69,6 @@ export async function POST(req: NextRequest) {
   const user = userSnap.data();
 
   const orderRef = db.collection("orders").doc();
-  const orderNumberCounterRef = db.collection("system").doc("orderNumberCounter");
   const orderYear = new Date().getUTCFullYear();
   let orderNumber = "";
   let existingOrderId: string | null = null;
@@ -73,19 +76,14 @@ export async function POST(req: NextRequest) {
   await db.runTransaction(async (tx) => {
     const idempotencySnap = await tx.get(idempotencyRef);
     if (idempotencySnap.exists) {
-      existingOrderId = idempotencySnap.data()?.orderId ?? null;
+      const record = idempotencySnap.data();
+      if (record?.customerId !== caller.uid || record?.requestFingerprint !== requestFingerprint) {
+        throw new Error("This Idempotency-Key was already used for a different request.");
+      }
+      existingOrderId = record?.orderId ?? null;
       return;
     }
-    const counterSnap = await tx.get(orderNumberCounterRef);
-    const nextSequence = (counterSnap.data()?.nextSequence ?? 1) as number;
-    if (!Number.isSafeInteger(nextSequence) || nextSequence < 1) {
-      throw new Error("Order number counter is invalid.");
-    }
-    orderNumber = `FN-${orderYear}-${String(nextSequence).padStart(6, "0")}`;
-    tx.set(orderNumberCounterRef, {
-      nextSequence: nextSequence + 1,
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+    orderNumber = await allocateOrderNumber(tx, db, orderYear);
     if (pricingSnapshot.promotionCode) {
       const promoQuery = await tx.get(db.collection("promotions").where("code", "==", pricingSnapshot.promotionCode).limit(1));
       if (promoQuery.empty) throw new Error("Promotion is no longer available.");
@@ -128,6 +126,7 @@ export async function POST(req: NextRequest) {
     });
     tx.create(idempotencyRef, {
       customerId: caller.uid,
+      requestFingerprint,
       orderId: orderRef.id,
       createdAt: FieldValue.serverTimestamp(),
     });
